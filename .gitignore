@@ -1,0 +1,22 @@
+# CodeForge AI - gitignore
+# See https://github.com/github/gitignore/blob/main/Global/gitignore
+
+.env
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.PDS_Store
+.pytest_cache
+
+# Project-specific
+.coverage
+htmlcov
+.mypy_cache
+.tox
+eggs
+dist
+build
+*.egg-info
