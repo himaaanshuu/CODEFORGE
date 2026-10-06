@@ -11,10 +11,16 @@ CodeForge AI will be an autonomous AI software engineering agent capable of
 understanding repositories, diagnosing coding problems, implementing fixes, running
 tests, and explaining its changes.
 
-# Planned Architecture
-The backend will follow a modular design with separate components for:
+# NVIDIA + Nebius Integration
+CodeForge AI uses Nebius Token Factory to access NVIDIA open-source models.
+The project is designed to use an NVIDIA open-source model (Nemotron family)
+through the Nebius platform. The model is configured using the NEBIUS_MODEL
+environment variable. The API key is stored locally in .env and is never committed
+to the repository.
+
+Planned Architecture:
+- LLM integration (NVIDIA open-source models via Nebius Token Factory)
 - Agent orchestration
-- LLM integration (NVIDIA open-source models via Nebius)
 - Repository analysis and tooling
 - Test generation and execution
 - Safe code execution sandbox
@@ -24,6 +30,7 @@ The backend will follow a modular design with separate components for:
 - HTTP Client: httpx
 - Environment: python-dotenv
 - Runtime: Uvicorn
+- API: Nebius Token Factory (OpenAI-compatible interface)
 
 # Development Setup
 1. Create a Python virtual environment: python3 -m venv .venv
@@ -34,8 +41,10 @@ The backend will follow a modular design with separate components for:
 
 # Environment Variables
 - NEBIUS_API_KEY: Your Nebius API key (required for LLM integration)
-- NEBIUS_BASE_URL: Nebius API base URL (default: https://api.nebius.ai/v1)
-- NEBIUS_MODEL: Default model name (default: nemotron)
+  Store this in backend/.env - never commit the actual key to the repo
+- NEBIUS_BASE_URL: Nebius API base URL (default: https://api.tokenfactory.nebius.com/v1)
+- NEBIUS_MODEL: Default model name (default: nebius/Nemotron-3_5-Lightning)
+  Choose from NVIDIA Nemotron family available through Token Factory
 - DEBUG: Enable debug mode (default: False)
 
 # Running the Backend
