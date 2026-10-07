@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   DESIGN TOKENS — single source of truth.
+   Colors are space-separated RGB so Tailwind opacity modifiers work.
+   ------------------------------------------------------------------ */
+:root {
+  /* colors */
+  --ink: 23 23 22;
+  --ink-soft: 37 36 33;
+  --ink-raised: 48 46 42;
+  --cream: 244 240 232;
+  --cream-deep: 233 226 213;
+  --cream-muted: 220 211 195;
+  --burgundy: 125 38 48;
+  --burgundy-light: 152 64 73;
+  --burgundy-dark: 93 29 37;
+  --sage: 115 119 95;
+  --sage-light: 137 139 114;
+  --denim: 104 116 122;
+  --denim-light: 125 136 139;
+  --rust: 156 78 52;
+  --muted: 112 110 104; /* darkened from #85837C for AA contrast on cream */
+
+  --border: rgb(23 23 22 / 0.13);
+  --border-strong: rgb(23 23 22 / 0.28);
+  --border-on-ink: rgb(244 240 232 / 0.14);
+
+  /* typography */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* spacing scale (rem) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  /* shadows — deliberately small */
+  --shadow-raised: 0 1px 0 rgb(23 23 22 / 0.04), 0 2px 8px -4px rgb(23 23 22 / 0.14);
+  --shadow-lift: 0 1px 0 rgb(23 23 22 / 0.05), 0 8px 20px -12px rgb(23 23 22 / 0.28);
+
+  /* motion */
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+  --dur-slow: 480ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* code (muted diff + syntax) */
+  --diff-add-bg: rgb(115 119 95 / 0.17);
+  --diff-del-bg: rgb(156 78 52 / 0.14);
+  --syn-keyword: rgb(var(--burgundy));
+  --syn-string: rgb(var(--sage));
+  --syn-comment: rgb(var(--muted));
+  --syn-number: rgb(var(--rust));
+  --syn-fn: rgb(var(--denim));
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: rgb(var(--ink));
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    color: rgb(var(--ink));
+    background-color: rgb(var(--cream));
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* extremely subtle paper grain (SVG noise, ~3% opacity) */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #root { position: relative; z-index: 1; }
+  ::selection { background: rgb(var(--burgundy) / 0.85); color: rgb(var(--cream)); }
+  :focus-visible {
+    outline: 2px solid rgb(var(--burgundy-light));
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+  .on-ink :focus-visible { outline-color: rgb(var(--cream)); }
+  button { font-family: inherit; }
+}
+
+@layer components {
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgb(var(--muted));
+  }
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(var(--cream-muted)) transparent; }
+}
+
+/* Reduced motion: collapse CSS animation/transition; framer handled in code. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
