@@ -37,7 +37,7 @@ class LLMGenerateRequest(BaseModel):
         0.7,
         description="Sampling temperature (0-2).",
         ge=0.0,
-        lte=2.0,
+        le=2.0,
     ),
     max_tokens: Optional[int] = Field(
         None,
@@ -56,7 +56,7 @@ class LLMGenerateRequest(BaseModel):
         1.0,
         description="Top-p nucleus sampling.",
         gt=0.0,
-        lte=1.0,
+        le=1.0,
     )
 
 

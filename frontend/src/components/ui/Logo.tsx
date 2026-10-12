@@ -1,4 +1,4 @@
-import { useId, useEffect, useState } from 'react'
+import { useId } from 'react'
 
 export function LogoMark({ className = '' }: { className?: string }) {
   const uid = useId().replace(/:/g, '')
