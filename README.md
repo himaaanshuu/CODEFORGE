@@ -302,38 +302,41 @@ Developer Review
 
 > Keep this table synchronized with the actual repository. Do not mark unfinished functionality as complete.
 
-| Feature | Status |
-|---|---|
-| React + Vite frontend | ✅ Available |
-| FastAPI backend | ✅ Available |
-| Nemotron 3 Ultra integration | ✅ Available |
-| Nebius Token Factory integration | ✅ Available |
-| Repository exploration | ✅ Available |
-| `list_files` | ✅ Available |
-| `read_file` | ✅ Available |
-| `search_code` | ✅ Available |
-| Workspace path security | ✅ Available |
-| Agent state management | ✅ Available |
-| Structured agent events | ✅ Available |
-| Code modification | 🔄 In Development |
-| `apply_patch` | 🔄 In Development |
-| Diff inspection | 🔄 In Development |
-| Test execution | 🔄 In Development |
-| Autonomous repair | 🔄 In Development |
-| Final verification | 🔄 In Development |
-| Git branch automation | 🔜 Planned |
-| Git commit automation | 🔜 Planned |
-| GitHub integration | 🔜 Planned |
-| Pull Request creation | 🔜 Planned |
-| Authentication | 🔜 Planned |
-| Supabase persistence | 🔜 Planned |
-| Prompt Score | 🔜 Planned |
-| Prompt Improvement | 🔜 Planned |
-| Token estimation | 🔜 Planned |
-| Token usage analytics | 🔜 Planned |
-| Agent efficiency | 🔜 Planned |
-| Repository architecture map | 🔜 Planned |
-| Dark / Light mode | 🔜 Planned |
+| Feature | Status | Notes |
+|---|---|---|
+| React + Vite frontend | ✅ Available | React 19, TypeScript, Tailwind CSS, Lucide Icons |
+| FastAPI backend | ✅ Available | Modular architecture, ASGI hot-reload, CORS |
+| Nemotron 3 Ultra integration | ✅ Available | `nvidia/nemotron-3-ultra-550b-a55b` via Nebius |
+| Nebius Token Factory integration | ✅ Available | OpenAI-compatible streaming & completions |
+| Repository exploration | ✅ Available | Path-traversal safe exploration suite |
+| `list_files` | ✅ Available | Traversal-guarded directory lister |
+| `read_file` | ✅ Available | Safe line-limited file reader with size caps |
+| `search_code` | ✅ Available | Regex/text search across workspace |
+| Workspace path security | ✅ Available | Chroot-style boundary enforcement & path checks |
+| Agent state management | ✅ Available | Multi-phase state machine & iteration control |
+| Structured agent events | ✅ Available | Real-time event timeline & streaming payloads |
+| Code modification | ✅ Available | Controlled modification with path verification |
+| `apply_patch` | ✅ Available | Unified diff patcher with atomic application |
+| `inspect_diff` | ✅ Available | Workspace diff inspection & hunk parsing |
+| `write_file` | ✅ Available | Safe workspace-only file creation & editing |
+| Test execution (`run_tests`) | ✅ Available | Sandboxed execution policy with strict command filtering |
+| Sandboxed test runner | ✅ Available | 60s timeout, SIGALRM, 100KB limits, env sanitization |
+| Autonomous repair loop | ✅ Available | Max 5 repair attempts, failure history tracking |
+| Failure diagnosis | ✅ Available | LLM root-cause analysis & regression prevention |
+| Final verification | ✅ Available | Full test suite re-verification gate before success |
+| GitHub OAuth authentication | ✅ Available | Supabase Auth with HS256 JWT validation & fail-closed |
+| Supabase run persistence | ✅ Available | PostgREST run storage, event timelines & metrics |
+| GitHub repo cloning | ✅ Available | `/api/v1/repos/clone` shallow clone into workspace |
+| Prompt Score | ✅ Available | 6-dimension rubric quality scoring (0–100) |
+| Prompt Improvement | ✅ Available | Prompt Lab suggestion engine & rewrite assistant |
+| Token estimation | ✅ Available | Heuristic pre-flight input/output token estimator |
+| Token usage analytics | ✅ Available | Usage dashboard with cost breakdown & charts |
+| Agent efficiency metrics | ✅ Available | Runtime, LLM calls, repair iterations, tool calls |
+| Repository architecture map | ✅ Available | Interactive visual dependency & module graph |
+| Dark / Light mode | ✅ Available | Editorial warm dark & clean light theme with persistence |
+| Git branch automation | 🔄 In Development | Automated feature branch creation |
+| Git commit automation | 🔄 In Development | Automated conventional commit creation |
+| Pull Request creation | 🔜 Planned | End-to-end GitHub PR creation via API |
 
 ---
 
@@ -780,69 +783,76 @@ codeforge-ai/
 │
 ├── backend/
 │   ├── app/
-│   │   ├── core/
-│   │   │   ├── main.py
-│   │   │   └── config.py
+│   │   ├── main.py                  # FastAPI application & API endpoints
+│   │   ├── config.py                # Environment & configuration loader
+│   │   ├── auth_middleware.py       # JWT authentication & fail-closed middleware
 │   │   │
-│   │   ├── llm/
-│   │   │   ├── __init__.py
-│   │   │   ├── client.py
-│   │   │   └── models.py
+│   │   ├── agent/                   # Agent orchestration
+│   │   │   ├── agent.py             # Main run loop, autonomous repair & verification
+│   │   │   ├── models.py            # Pydantic models for events, states & requests
+│   │   │   ├── prompts.py           # System prompts & developer instructions
+│   │   │   └── state.py             # Agent runtime state & iteration tracker
 │   │   │
-│   │   ├── agent/
-│   │   │   ├── agent.py
-│   │   │   ├── models.py
-│   │   │   ├── prompts.py
-│   │   │   └── state.py
+│   │   ├── execution/               # Sandboxed test execution
+│   │   │   ├── models.py            # Execution models & result schemas
+│   │   │   └── runner.py            # Safe runner with timeout & env sanitization
 │   │   │
-│   │   ├── tools/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py
-│   │   │   ├── registry.py
-│   │   │   └── repository_tools.py
+│   │   ├── llm/                     # Nebius Token Factory client
+│   │   │   ├── client.py            # NVIDIA Nemotron LLM integration
+│   │   │   └── models.py            # Request/response schemas
 │   │   │
-│   │   ├── repository/
-│   │   │   ├── __init__.py
-│   │   │   └── workspace.py
+│   │   ├── repository/              # Workspace boundary safety
+│   │   │   └── workspace.py         # Path validation & directory navigation
 │   │   │
-│   │   └── execution/
-│   │       ├── models.py
-│   │       ├── policy.py
-│   │       ├── runner.py
-│   │       └── sandbox.py
+│   │   └── tools/                   # Controlled agent tools
+│   │       ├── base.py              # Base tool contract
+│   │       ├── registry.py          # Tool registration & discovery
+│   │       ├── repository_tools.py  # list_files, read_file, search_code
+│   │       ├── modification_tools.py# apply_patch, inspect_diff, write_file
+│   │       └── execution_tools.py   # run_tests tool wrapper
 │   │
-│   └── tests/
-│       ├── test_agent.py
-│       ├── test_llm.py
-│       ├── test_workspace_security.py
-│       └── fixtures/
-│           └── sample_repo/
+│   ├── auth_dep.py                  # FastAPI auth dependency injection
+│   ├── supabase_auth.py             # Supabase JWT token verification
+│   ├── supabase_service.py          # Supabase PostgREST persistence service
+│   ├── requirements.txt             # Python dependencies
+│   │
+│   └── tests/                       # 84 unit and integration tests (all passing)
+│       ├── test_agent.py            # Agent loop, events & failure recovery
+│       ├── test_api.py              # Workspace, file & tree API endpoints
+│       ├── test_auth.py             # JWT signature, expiration, algorithm tests
+│       ├── test_auth_middleware.py   # HTTP middleware 401/503 & CORS verification
+│       ├── test_llm.py              # LLM client & configuration tests
+│       ├── test_supabase.py         # Persistence, RLS & user isolation
+│       ├── test_workspace_security.py # Path traversal & boundary protection
+│       └── conftest.py              # Test fixtures & mocks
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Agent/
-│   │   │   ├── Code/
-│   │   │   ├── Repository/
-│   │   │   ├── Tests/
-│   │   │   └── UI/
-│   │   ├── hooks/
-│   │   ├── lib/
-│   │   ├── data/
-│   │   ├── App.tsx
-│   │   ├── index.css
-│   │   └── main.tsx
-│   └── package.json
+│   │   │   ├── agent/               # AgentStatus, TaskInput, PromptComposer, Activity
+│   │   │   ├── code/                # DiffViewer, CodeViewer, HighlightedLine
+│   │   │   ├── insights/            # PromptLab, UsageDashboard, Efficiency, ArchitectureMap
+│   │   │   ├── intro/               # IntroAnimation
+│   │   │   ├── layout/              # AppShell, Header, Sidebar
+│   │   │   ├── repository/          # FileExplorer, RepoList
+│   │   │   ├── run/                 # ChangesTab, TestsTab, VerificationTab
+│   │   │   └── ui/                  # Button, Tabs, Alert, ScoreRing, ThemeToggle, Logo
+│   │   ├── hooks/                   # useAgentRun, useAuth, useTheme
+│   │   ├── lib/                     # agentClient, githubClient, promptScore, supabase
+│   │   ├── screens/                 # Landing, Auth, GithubConnect, Workspace
+│   │   ├── types/                   # TypeScript interfaces & types
+│   │   ├── App.tsx                  # Root application router & screen manager
+│   │   ├── index.css                # Editorial styling, CSS variables & typography
+│   │   └── main.tsx                 # React DOM root entry
+│   │
+│   ├── package.json
+│   ├── tailwind.config.cjs
+│   └── vite.config.ts
 │
 ├── supabase/
 │   └── migrations/
+│       └── 0001_init.sql            # PostgreSQL schema: runs, events, usage, RLS
 │
-├── docs/
-│   ├── architecture/
-│   ├── screenshots/
-│   └── demo/
-│
-├── .env.example
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -906,45 +916,41 @@ npm install
 
 # 🔑 Environment Variables
 
-Create:
+### Backend (`backend/.env`)
 
-```text
-backend/.env
-```
-
-Example:
+Copy from `backend/.env.example`:
 
 ```env
+# --- Nebius Token Factory (NVIDIA Nemotron) ---
 NEBIUS_API_KEY=your_nebius_api_key
 NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
 NEBIUS_MODEL=nvidia/nemotron-3-ultra-550b-a55b
+DEBUG=False
+
+# --- Supabase (Auth verification + PostgREST run persistence) ---
+# Project Settings → API: Project URL, JWT secret, service_role key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_JWT_SECRET=your_jwt_secret
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# --- CORS ---
+FRONTEND_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
-Future Supabase variables:
+### Frontend (`frontend/.env.local`)
+
+Copy from `frontend/.env.local.example`:
 
 ```env
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+# Backend API Base (default: http://localhost:8000/api/v1)
+VITE_API_BASE=http://localhost:8000/api/v1
+
+# Supabase Auth & Storage (Project Settings → API → Project URL + anon public key)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_public_key
 ```
 
-Frontend:
-
-```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### Never commit
-
-```text
-.env
-API keys
-Service role keys
-GitHub access tokens
-Passwords
-Secrets
-```
+> **Security Note**: Never commit `.env` or `*.local` files. API keys and service role keys must always remain server-side.
 
 ---
 
@@ -955,20 +961,18 @@ Secrets
 From `backend/`:
 
 ```bash
-uvicorn app.core.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000
 ```
 
-Backend:
+Or from project root:
 
-```text
-http://localhost:8000
+```bash
+uvicorn backend.app.main:app --reload --port 8000
 ```
 
-Health endpoint:
-
-```text
-http://localhost:8000/health
-```
+- API Base: `http://localhost:8000`
+- Health check: `http://localhost:8000/health`
+- Interactive Swagger docs: `http://localhost:8000/docs`
 
 ---
 
@@ -980,34 +984,40 @@ From `frontend/`:
 npm run dev
 ```
 
-Frontend:
-
-```text
-http://localhost:5173
-```
+- Web UI: `http://localhost:5173`
 
 ---
 
-# 🧪 Testing
+# 🧪 Testing & Validation
 
-Run backend tests:
+### Backend Test Suite
+
+Run all tests via pytest:
 
 ```bash
 cd backend
-pytest
+pytest -v
 ```
 
-The test suite covers areas such as:
+**84 / 84 tests passing:**
 
-```text
-LLM integration
-Agent behavior
-Workspace security
-Repository tools
-Execution policy
+| Test Suite | Tests | Scope |
+|---|---|---|
+| `tests/test_agent.py` | 9 | Agent loop, state machine, lifecycle events |
+| `tests/test_api.py` | 15 | Workspaces, tree, file, clone, runs endpoints |
+| `tests/test_auth.py` | 18 | Real HS256 JWT validation, expiration, algorithm whitelist |
+| `tests/test_auth_middleware.py` | 9 | Pre-routing 401/503 fail-closed logic & CORS |
+| `tests/test_llm.py` | 4 | Nebius Token Factory client & model configuration |
+| `tests/test_supabase.py` | 17 | Run persistence, ownership isolation & RLS policies |
+| `tests/test_workspace_security.py` | 12 | Path traversal prevention & chroot boundaries |
+
+### Frontend Build & Typecheck
+
+```bash
+cd frontend
+npm run lint     # oxlint (0 errors)
+npm run build    # tsc -b && vite build (production bundle validation)
 ```
-
-Always use the actual current test result in documentation and demos.
 
 ---
 
@@ -1312,27 +1322,22 @@ VERIFYING ────→ FAILED
 
 # 🧩 API Surface
 
-Current / planned API organization:
+All `/api/v1/*` routes require a verified Supabase access token (`Authorization: Bearer <token>`). Missing/invalid tokens fail closed with `401 Unauthorized`; unconfigured Supabase credentials return `503 Service Unavailable`.
 
-```text
-/api/v1
-│
-├── /health
-│
-├── /llm
-│   └── /generate
-│
-├── /agent
-│   └── /analyze
-│
-├── /repositories
-├── /projects
-├── /runs
-├── /tests
-└── /github
-```
-
-> Keep this section synchronized with the actual FastAPI routes.
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/` | Public | Service health & welcome message |
+| `GET` | `/health` | Public | Uptime & health check |
+| `POST` | `/api/v1/llm/generate` | Protected | Direct generation via NVIDIA Nemotron (Nebius) |
+| `POST` | `/api/v1/repos/clone` | Protected | Clone GitHub repository into backend workspace |
+| `GET` | `/api/v1/workspaces` | Protected | List registered workspaces with active git branch |
+| `GET` | `/api/v1/workspaces/{id}/tree` | Protected | Safe directory tree (sensitive dirs skipped) |
+| `GET` | `/api/v1/workspaces/{id}/file` | Protected | Read file contents (traversal/sensitive guarded) |
+| `POST` | `/api/v1/agent/analyze` | Protected | Run autonomous agent loop on workspace task |
+| `POST` | `/api/v1/runs` | Protected | Execute agent and persist run, metrics & events |
+| `GET` | `/api/v1/runs` | Protected | Caller's persisted runs (newest first, cursor paginated) |
+| `GET` | `/api/v1/runs/{run_id}` | Protected | Fetch run details and execution status |
+| `GET` | `/api/v1/runs/{run_id}/events` | Protected | Paginated event timeline of an agent run |
 
 ---
 
