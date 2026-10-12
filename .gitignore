@@ -18,5 +18,6 @@ htmlcov
 .tox
 eggs
 dist
+cloned_repos/
 build
 *.egg-info

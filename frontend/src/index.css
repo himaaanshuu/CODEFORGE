@@ -66,6 +66,70 @@
   --syn-comment: rgb(var(--muted));
   --syn-number: rgb(var(--rust));
   --syn-fn: rgb(var(--denim));
+
+  /* semantic layer (theme-aware; overridden in dark) */
+  --bg: 244 240 232;        /* page background */
+  --surface: 252 250 245;   /* cards, panels */
+  --fg: 23 23 22;           /* primary text */
+  --subtle: 112 110 104;    /* secondary text */
+  --accent: 125 38 48;      /* brand burgundy */
+  --ok: 115 119 95;         /* success sage */
+  --bad: 156 78 52;         /* failure rust */
+  --info: 104 116 122;      /* info blue-gray */
+  --raised: 233 226 213;    /* hover surface */
+  --line: rgb(23 23 22 / 0.13);
+  --line-strong: rgb(23 23 22 / 0.28);
+  --on-accent: 244 240 232; /* text on burgundy (never flips) */
+}
+
+/* ------------------------------------------------------------------
+   DARK THEME — charcoal ground, cream text. Set via data-theme="dark".
+   ------------------------------------------------------------------ */
+[data-theme='dark'] {
+  --ink: 244 240 232;
+  --ink-soft: 226 220 208;
+  --ink-raised: 70 68 63;
+  --cream: 24 24 23;
+  --cream-deep: 36 35 33;
+  --cream-muted: 56 54 50;
+  --burgundy: 176 84 94;
+  --burgundy-light: 201 109 118;
+  --burgundy-dark: 141 62 71;
+  --sage: 150 155 124;
+  --sage-light: 171 175 147;
+  --denim: 139 152 159;
+  --denim-light: 161 173 179;
+  --rust: 197 111 75;
+  --muted: 158 153 143;
+
+  --border: rgb(244 240 232 / 0.14);
+  --border-strong: rgb(244 240 232 / 0.28);
+  --border-on-ink: rgb(244 240 232 / 0.14);
+
+  --diff-add-bg: rgb(150 155 124 / 0.18);
+  --diff-del-bg: rgb(197 111 75 / 0.16);
+  --syn-keyword: rgb(var(--burgundy-light));
+  --syn-string: rgb(var(--sage-light));
+  --syn-comment: rgb(var(--muted));
+  --syn-number: rgb(var(--rust));
+  --syn-fn: rgb(var(--denim-light));
+
+  --bg: 24 24 23;
+  --surface: 34 33 31;
+  --fg: 244 240 232;
+  --subtle: 158 153 143;
+  --accent: 176 84 94;
+  --ok: 150 155 124;
+  --bad: 197 111 75;
+  --info: 139 152 159;
+  --raised: 45 44 41;
+  --line: rgb(244 240 232 / 0.13);
+  --line-strong: rgb(244 240 232 / 0.26);
+}
+
+[data-theme='dark'] body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--fg));
 }
 
 @layer base {
@@ -78,8 +142,8 @@
     font-family: var(--font-sans);
     font-size: 15px;
     line-height: 1.55;
-    color: rgb(var(--ink));
-    background-color: rgb(var(--cream));
+    color: rgb(var(--fg));
+    background-color: rgb(var(--bg));
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -111,9 +175,26 @@
     font-weight: 600;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: rgb(var(--muted));
+    color: rgb(var(--subtle));
   }
   .scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(var(--cream-muted)) transparent; }
+  .field {
+    display: block;
+    width: 100%;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background-color: rgb(var(--surface));
+    padding: 0.5rem 0.75rem;
+    color: rgb(var(--fg));
+    outline: none;
+    transition: border-color var(--dur-fast);
+  }
+  .field::placeholder { color: rgb(var(--subtle)); }
+  .field:focus-visible {
+    border-color: rgb(var(--accent));
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 1px;
+  }
 }
 
 /* Reduced motion: collapse CSS animation/transition; framer handled in code. */

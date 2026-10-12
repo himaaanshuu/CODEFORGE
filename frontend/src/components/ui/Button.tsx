@@ -6,17 +6,34 @@ interface Props {
   onClick?: () => void
   disabled?: boolean
   variant?: 'primary' | 'ghost'
+  size?: 'sm' | 'md'
   type?: 'button' | 'submit'
   ariaLabel?: string
+  title?: string
+  full?: boolean
 }
 
-export function Button({ children, onClick, disabled, variant = 'primary', type = 'button', ariaLabel }: Props) {
+export function Button({
+  children,
+  onClick,
+  disabled,
+  variant = 'primary',
+  size = 'md',
+  type = 'button',
+  ariaLabel,
+  title,
+  full,
+}: Props) {
   const reduce = useReducedMotion()
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-sm px-5 py-2.5 font-display text-xs font-semibold tracking-[0.14em] transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-45'
+    'inline-flex items-center justify-center gap-2 rounded-sm font-display font-semibold tracking-[0.14em] transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-45'
+  const sizing =
+    size === 'sm'
+      ? 'px-3.5 py-1.5 text-[0.6875rem]'
+      : 'px-5 py-2.5 text-xs'
   const styles =
     variant === 'primary'
-      ? 'bg-burgundy text-cream hover:bg-burgundy-light'
+      ? 'bg-burgundy text-on-accent hover:bg-burgundy-light'
       : 'border border-strong text-ink hover:bg-cream-deep'
   return (
     <motion.button
@@ -24,7 +41,8 @@ export function Button({ children, onClick, disabled, variant = 'primary', type 
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
-      className={`${base} ${styles}`}
+      title={title}
+      className={`${base} ${sizing} ${styles} ${full ? 'w-full' : ''}`}
       whileHover={reduce || disabled ? undefined : { y: -1 }}
       whileTap={reduce || disabled ? undefined : { scale: 0.97 }}
       transition={{ duration: 0.14 }}

@@ -1,36 +1,49 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ActivityEvent, AgentRun, AgentState } from '../types'
-import { startMockRun } from '../data/mockAgent'
+import { useCallback, useRef, useState } from 'react'
+import type { ActivityEvent, AgentRunView, AgentState } from '../types'
+import { startAgentTask } from '../lib/agentClient'
 
-export interface AgentRunState {
+export interface AgentController {
   state: AgentState
   events: ActivityEvent[]
-  run: AgentRun | null
+  run: AgentRunView | null
   running: boolean
-  start: (task: string) => void
+  start: (task: string, workspaceId?: string) => void
   reset: () => void
 }
 
-export function useAgentRun(): AgentRunState {
+export function useAgentRun(): AgentController {
   const [state, setState] = useState<AgentState>('READY')
   const [events, setEvents] = useState<ActivityEvent[]>([])
-  const [run, setRun] = useState<AgentRun | null>(null)
-  const cancel = useRef<(() => void) | null>(null)
+  const [run, setRun] = useState<AgentRunView | null>(null)
+  // Monotonic id so a stale run's callbacks never overwrite a newer run.
+  const runId = useRef(0)
 
-  useEffect(() => () => cancel.current?.(), [])
-
-  const start = useCallback((task: string) => {
-    cancel.current?.()
+  const start = useCallback((task: string, workspaceId: string = 'local-project') => {
+    const id = ++runId.current
     setEvents([]); setRun(null); setState('ANALYZING')
-    cancel.current = startMockRun(task, {
-      onEvent: e => { setEvents(prev => [...prev, e]); setState(e.state) },
-      onComplete: r => { setRun(r); setState('COMPLETED') },
-    })
+    startAgentTask(
+      task,
+      workspaceId,
+      (event) => {
+        if (runId.current !== id) return
+        setEvents(prev => [...prev, event])
+        setState(event.state)
+      },
+      (result) => {
+        if (runId.current !== id) return
+        setRun(result)
+        setState(result.success ? 'COMPLETED' : 'FAILED')
+      },
+    )
   }, [])
 
   const reset = useCallback(() => {
-    cancel.current?.(); setEvents([]); setRun(null); setState('READY')
+    runId.current += 1
+    setEvents([]); setRun(null); setState('READY')
   }, [])
 
-  return { state, events, run, running: state !== 'READY' && state !== 'COMPLETED' && state !== 'FAILED', start, reset }
+  const running =
+    state !== 'READY' && state !== 'COMPLETED' && state !== 'FAILED'
+
+  return { state, events, run, running, start, reset }
 }

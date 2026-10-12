@@ -22,7 +22,7 @@ from backend.app.llm.models import (
 from backend.app.llm.client import NebiusClient
 
 
-def test_configuration_helpers() -> None:
+def test_configuration_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test configuration helper functions."""
     # Test that get_model_name works
     model = get_model_name()
@@ -35,6 +35,10 @@ def test_configuration_helpers() -> None:
     assert "nebius" in base.lower() or "tokenfactory" in base.lower()
 
     # is_configured should return False when no API key is set
+    # (isolate from the developer machine's backend/.env)
+    import backend.app.llm.models as llm_models
+
+    monkeypatch.setattr(llm_models, "NEBIUS_API_KEY", "")
     assert is_configured() is False
 
     # get_api_key should return empty string when not configured
@@ -70,8 +74,13 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_client_initialization_without_key() -> None:
+async def test_client_initialization_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test NebiusClient can be initialized without an API key (graceful degradation)."""
+    # Isolate from the developer machine's backend/.env
+    import backend.app.llm.models as llm_models
+
+    monkeypatch.setattr(llm_models, "NEBIUS_API_KEY", "")
+
     from backend.app.llm.client import NebiusClient
 
     # Client should initialize even without API key

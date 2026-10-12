@@ -124,14 +124,16 @@ pip install -r backend/requirements.txt
 # 3. Configure API key
 cp backend/.env.example backend/.env
 # Edit backend/.env and add your NEBIUS_API_KEY
+# Add SUPABASE_* values (see 🔐 Supabase Setup) to enable sign-in
 # Never commit .env files - they're gitignored
 
-# 3. Run the backend
+# 4. Run the backend
 uvicorn backend.app.main:app --reload
 # Server: http://localhost:8000
 
-# 4. Run the frontend
+# 5. Run the frontend
 cd frontend
+cp .env.local.example .env.local   # fill in VITE_SUPABASE_* values
 npm install
 npm run dev
 # Server: http://localhost:5173
@@ -141,12 +143,25 @@ npm run dev
 
 # 📦 Available API Endpoints
 
+All `/api/v1/*` routes require a Supabase access token (`Authorization: Bearer <token>`):
+
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | "CodeForge AI is running" |
-| `GET /health` | "healthy" — service health check |
+| `GET /` | "CodeForge AI is running" (public) |
+| `GET /health` | "healthy" — service health check (public) |
 | `POST /api/v1/llm/generate` | Generate response from NVIDIA model via Nebius |
-| `POST /api/v1/agent/analyze` | Run the coding agent on a task |
+| `POST /api/v1/agent/analyze` | Run the coding agent on a task (ephemeral) |
+| `GET /api/v1/workspaces` | List workspaces with real git branch |
+| `GET /api/v1/workspaces/{id}/tree` | Directory tree (sensitive dirs skipped) |
+| `GET /api/v1/workspaces/{id}/file` | File contents (traversal/sensitive guarded) |
+| `POST /api/v1/runs` | Run the agent **and persist** the run (status, metrics, events) |
+| `GET /api/v1/runs` | Caller's own runs, newest first (cursor pagination) |
+| `GET /api/v1/runs/{run_id}` | One run — 404 unknown, 403 another user's run |
+| `GET /api/v1/runs/{run_id}/events` | Paginated event timeline of one run |
+
+Auth failures fail closed: missing/malformed token → `401`; Supabase not
+configured on the server → `503` with an explicit configuration error
+(never a silent bypass).
 
 ---
 
@@ -215,24 +230,72 @@ npm run dev
 
 # 📚 Environment Variables
 
+**Backend (`backend/.env`)**
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEBIUS_API_KEY` | _(required)_ | Your Nebius API key |
 | `NEBIUS_BASE_URL` | `https://api.tokenfactory.nebius.com/v1` | API base URL |
-| `NEBIUS_MODEL` | `nvidia/nemotron-3-ultra-550b-a55b` | Model name |
+| `NEBIUS_MODEL` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Model name (case-sensitive) |
 | `DEBUG` | `False` | Debug mode |
+| `SUPABASE_URL` | _(required)_ | Supabase project URL (`https://<ref>.supabase.co`) |
+| `SUPABASE_JWT_SECRET` | _(required)_ | Auth JWT secret (HS256 token verification) |
+| `SUPABASE_SERVICE_ROLE_KEY` | _(required)_ | Server-only service-role key (PostgREST writes) |
+| `FRONTEND_ORIGINS` | `http://localhost:5173,...` | CORS allowed origins (comma-separated) |
+
+**Frontend (`frontend/.env.local`)**
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_BASE` | Backend base URL (default `http://localhost:8000/api`) |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Supabase project URL + anon (public) key |
+
+`.env`, `frontend/.env.local` and `*.local` are gitignored — never commit secrets.
+
+---
+
+# 🔐 Supabase Setup (required to sign in)
+
+Supabase Auth is the identity authority (GitHub-only sign-in); Supabase
+Postgres persists runs. Until both halves below are configured the app
+**fails closed**: the backend answers `503` on protected routes and the
+frontend shows a configuration error on the sign-in screen (no mock users,
+no bypass).
+
+1. **Create the project** → https://supabase.com → *New project*.
+2. **Enable GitHub sign-in**: *Authentication → Sign In → GitHub → Enable*
+   → paste your GitHub OAuth App's Client ID + Client Secret
+   (GitHub → Settings → Developer settings → OAuth Apps). Set the OAuth
+   App's callback URL to the one Supabase shows:
+   `https://<ref>.supabase.co/auth/v1/callback`.
+3. **Run the schema**: *SQL Editor → New query* → paste
+   `supabase/migrations/0001_init.sql` → **Run**. RLS is enabled with **no
+   policies** — clients are denied all direct database access; only the
+   backend's service-role key can read/write (server-owned persistence:
+   clients can never forge runs, events, or usage records).
+4. **Keys** → *Project Settings → API*:
+   - `frontend/.env.local`: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`
+     (anon key is public by design).
+   - `backend/.env`: `SUPABASE_URL` + `SUPABASE_JWT_SECRET` +
+     `SUPABASE_SERVICE_ROLE_KEY` (service-role key is a **server secret** —
+     never expose it to the browser or commit it).
 
 ---
 
 # 🧪 Backend Tests
 
-All 25 tests pass across three categories:
+All **76 tests** pass (JWT verification runs for real with a test-owned
+secret; PostgREST storage is faked in tests only):
 
 | Test Suite | Tests | Purpose |
 |------------|-------|---------|
-| `test_llm.py` | 4 | LLM integration without API key |
-| `test_workspace_security.py` | 12 | Path traversal prevention |
 | `test_agent.py` | 9 | Agent models, parsing, events |
+| `test_api.py` | 12 | Workspace/file/tree endpoints (auth mocked) |
+| `test_auth.py` | 14 | Real JWT verification: 401/503/sub wiring |
+| `test_auth_middleware.py` | 9 | Pre-routing 401 + CORS headers/preflight |
+| `test_supabase.py` | 16 | Run persistence, ownership isolation, RLS SQL |
+| `test_llm.py` | 4 | LLM configuration/client (env-isolated) |
+| `test_workspace_security.py` | 12 | Path traversal prevention |
 
 Run: `cd backend && source .venv/bin/activate && python -m pytest --tb=short`
 

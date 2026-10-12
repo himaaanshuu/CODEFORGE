@@ -318,4 +318,5 @@ class AgentState:
             repair_attempts=self.repair_attempts,
             max_repair_iterations=self.max_repair_iterations,
             phase=self.phase,
+            events=[event.model_dump() for event in self.events],
         )

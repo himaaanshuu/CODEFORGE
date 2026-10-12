@@ -3,7 +3,11 @@ export type AgentState =
   | 'PLANNING' | 'IMPLEMENTING' | 'MODIFICATION' | 'TESTING' | 'FAILURE_ANALYSIS'
   | 'REPAIR' | 'VERIFICATION' | 'COMPLETED' | 'FAILED'
 
-export type ViewId = 'repository' | 'files' | 'agent' | 'changes' | 'tests'
+export type ViewId =
+  | 'repositories' | 'files' | 'agent' | 'changes' | 'tests'
+  | 'architecture' | 'prompt' | 'usage' | 'efficiency'
+
+export type RunTab = 'activity' | 'changes' | 'tests' | 'verification'
 
 export type EventStatus = 'done' | 'active' | 'failed'
 
@@ -13,6 +17,7 @@ export interface ActivityEvent {
   text: string
   state: AgentState
   status: EventStatus
+  detail?: string
 }
 
 export interface RepoNode {
@@ -22,14 +27,21 @@ export interface RepoNode {
   children?: RepoNode[]
 }
 
-export interface Repository {
+export interface WorkspaceInfo {
+  id: string
   name: string
-  owner: string
+  path: string
   branch: string
+}
+
+export interface RepoSummary {
+  owner: string
+  name: string
   language: string
-  files: number
-  description: string
-  tree: RepoNode[]
+  stars: number
+  updated: string
+  visibility?: 'public' | 'private'
+  fork?: boolean
 }
 
 export type DiffKind = 'context' | 'add' | 'del'
@@ -48,36 +60,39 @@ export interface FileChange {
   lines: DiffLine[]
 }
 
-export interface TestSuite {
+export interface TestCase {
   name: string
-  passed: number
-  failed: number
+  passed: boolean
+  seconds: number
 }
 
 export interface TestRun {
-  suites: TestSuite[]
+  tests: TestCase[]
   durationSeconds: number
 }
 
-export interface TaskResult {
-  summary: string
-  filesChanged: number
-  testsPassed: number
-  regressions: number
-}
-
-/** Shape the real backend client should return. Replace data/mockAgent.ts with an API-backed implementation. */
-export interface AgentRun {
-  events: ActivityEvent[]
-  changes: FileChange[]
-  tests: TestRun
-  result: TaskResult
+/** Real per-run metrics reported by the backend. */
+export interface RunMetrics {
+  durationSeconds: number
+  tokensUsed: number
+  iterations: number
+  maxIterations: number
+  toolsUsed: string[]
   repairAttempts: number
-  verification: VerificationResult
+  filesChanged: number
+  model: string
 }
 
-export interface VerificationResult {
-  targetIssueResolved: boolean
-  regressionSuitePassed: boolean
-  changesValidated: boolean
+/** One agent run as mapped from the backend analysis response. */
+export interface AgentRunView {
+  success: boolean
+  status: string
+  message: string
+  events: ActivityEvent[]
+  plan: string[]
+  filesInspected: string[]
+  filesChanged: string[]
+  changes: FileChange[]
+  tests: TestRun | null
+  metrics: RunMetrics
 }

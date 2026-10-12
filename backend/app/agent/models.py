@@ -9,7 +9,14 @@ from pydantic import BaseModel, Field
 class AgentStatus(BaseModel):
     """Status of agent execution during a task."""
 
-    status: Literal["running", "completed", "failed", "iterations_exceeded"] = Field(
+    status: Literal[
+        "running",
+        "completed",
+        "failed",
+        "iterations_exceeded",
+        "repair_failed",
+        "error",
+    ] = Field(
         ...,
         description="Current agent execution status.",
     )
@@ -28,6 +35,10 @@ class AgentStatus(BaseModel):
     messages: List[str] = Field(
         default_factory=list,
         description="High-level summaries of agent reasoning.",
+    )
+    error: Optional[str] = Field(
+        None,
+        description="Error message when the agent run fails.",
     )
 
 
@@ -146,6 +157,50 @@ class AgentResponse(BaseModel):
     iteration: int = Field(
         0,
         description="Final iteration count.",
+    )
+    max_iterations: int = Field(
+        10,
+        description="Maximum agent iterations allowed for this run.",
+    )
+    files_changed: List[str] = Field(
+        default_factory=list,
+        description="Files modified by the agent during this run.",
+    )
+    modification_count: int = Field(
+        0,
+        description="Number of file modifications applied.",
+    )
+    diff_summary: str = Field(
+        "",
+        description="Unified diff of the changes made in this run.",
+    )
+    tokens_used: int = Field(
+        0,
+        description="Total provider tokens consumed across LLM calls.",
+    )
+    duration_seconds: float = Field(
+        0.0,
+        description="Wall-clock duration of the agent run in seconds.",
+    )
+    model: str = Field(
+        "",
+        description="Model that served the run (empty when unknown).",
+    )
+    repair_attempts: int = Field(
+        0,
+        description="Number of repair attempts performed.",
+    )
+    max_repair_iterations: int = Field(
+        5,
+        description="Maximum repair attempts allowed.",
+    )
+    phase: str = Field(
+        "",
+        description="Final lifecycle phase of the run.",
+    )
+    events: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Ordered agent event timeline for this run (type, timestamp, data).",
     )
 
 

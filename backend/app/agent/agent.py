@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
+import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -12,7 +15,6 @@ from .models import (
     AgentStatus,
     ToolCall,
     ToolResult,
-    AgentObservation,
     AgentObservation,
     AgentStartedEvent,
     ToolRequestedEvent,
@@ -36,9 +38,37 @@ from .state import AgentState
 from ..repository.workspace import Workspace
 from ..tools.registry import ToolRegistry
 from ..tools.repository_tools import ListFilesTool, ReadFileTool, SearchCodeTool
+from ..tools.modification_tools import ApplyPatchTool, InspectDiffTool, WriteFileTool
+from ..tools.execution_tools import RunTestsTool
 
 
 MAX_DEFAULT_ITERATIONS = 10
+
+
+def _usage_total_tokens(usage: Optional[Dict[str, Any]]) -> int:
+    """Extract total token count from a provider usage payload, if present."""
+    if not isinstance(usage, dict):
+        return 0
+    total = usage.get("total_tokens", 0)
+    try:
+        return int(total)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _finalize_response(
+    response: AgentResponse,
+    state: AgentState,
+    started_at: float,
+    tokens_used: int,
+    model: str = "",
+) -> AgentResponse:
+    """Attach real run metrics (duration, tokens, model) to a response."""
+    response.duration_seconds = round(time.monotonic() - started_at, 3)
+    response.tokens_used = tokens_used
+    response.model = model or response.model
+    response.max_iterations = state.max_iterations
+    return response
 
 
 async def run_agent_task(
@@ -58,6 +88,10 @@ async def run_agent_task(
     """
     if max_iterations is None:
         max_iterations = MAX_DEFAULT_ITERATIONS
+
+    started_at = time.monotonic()
+    total_tokens = 0
+    model_name = ""
 
     # Initialize workspace and agent state
     ws = Workspace(workspace_root)
@@ -82,12 +116,14 @@ async def run_agent_task(
     patch_tool = ApplyPatchTool(ws)
     inspect_diff_tool = InspectDiffTool(ws)
     write_file_tool = WriteFileTool(ws)
+    run_tests_tool = RunTestsTool(ws.root)
     registry.register(list_tool)
     registry.register(read_tool)
     registry.register(search_tool)
     registry.register(patch_tool)
     registry.register(inspect_diff_tool)
     registry.register(write_file_tool)
+    registry.register(run_tests_tool)
 
     # Prepare initial system prompt
     system_prompt = get_system_prompt()
@@ -134,19 +170,7 @@ async def run_agent_task(
             })
 
         # Call the LLM (using the existing Nebius client)
-        from ..llm.client import get_client
-
-        client = get_client()
-        response = await client.generate(
-            prompt="",  # We'll use the messages list approach - but generate() takes a prompt string
-            model=None,
-            temperature=0.7,
-            max_tokens=1000,
-            top_p=1.0,
-        )
-
-        # Since the client.generate() takes a single prompt string, we'll create a
-        # combined prompt from the instructions and observations
+        # Build a combined prompt from the system prompt, task, and observations
         combined_prompt = _build_combined_prompt(
             system_prompt=system_prompt,
             task=task,
@@ -161,6 +185,19 @@ async def run_agent_task(
             temperature=0.7,
             max_tokens=1000,
         )
+
+        # Fail fast on provider errors (missing API key, HTTP failure, ...)
+        if not llm_response.success:
+            error_msg = llm_response.error or "LLM request failed"
+            state.status.status = "error"
+            state.status.error = error_msg  # type: ignore[union-attr]
+            response = state.to_response()
+            response.error = error_msg
+            state.add_event(AgentFailedEvent(error=error_msg))
+            return _finalize_response(response, state, started_at, total_tokens, model_name)
+
+        total_tokens += _usage_total_tokens(llm_response.usage)
+        model_name = llm_response.model or model_name
 
         # Parse the LLM response to determine the next action
         # The LLM should respond with either a tool call or a final analysis
@@ -312,6 +349,7 @@ async def run_agent_task(
             response = state.to_response()
             response.plan = action.get("plan", [])
             response.observations = state.observations
+            response = _finalize_response(response, state, started_at, total_tokens, model_name)
 
             # Emit agent completed event
             completed = AgentCompletedEvent(
@@ -330,6 +368,7 @@ async def run_agent_task(
 
             response = state.to_response()
             response.error = error_msg
+            response = _finalize_response(response, state, started_at, total_tokens, model_name)
 
             # Emit agent failed event
             failed = AgentFailedEvent(error=error_msg)
@@ -349,6 +388,7 @@ async def run_agent_task(
     response = state.to_response()
     response.plan = []
     response.error = state.status.error
+    response = _finalize_response(response, state, started_at, total_tokens, model_name)
 
     # Emit agent completed event
     completed_status = state.status.status
@@ -491,21 +531,43 @@ async def _execute_tool(
 
     Returns a ToolResult instance.
     """
-    # Try the registry first
-    result = registry.execute_tool(tool_name, **arguments)
-    if result.success:
-        return result
+    tool = registry.get(tool_name)
+    if tool is not None:
+        try:
+            res = tool.execute(**arguments)
+            if inspect.isawaitable(res):
+                res = await res
+            if isinstance(res, ToolResult):
+                return res
+            if isinstance(res, dict):
+                return ToolResult(
+                    name=tool_name,
+                    success=res.get("success", False),
+                    data=res,
+                    error=res.get("error"),
+                )
+            return ToolResult(name=tool_name, success=True, data=res)
+        except Exception as exc:
+            return ToolResult(name=tool_name, success=False, error=str(exc))
 
     # Fall back to direct tool execution
     if tool_name == "list_files":
-        tool = ListFilesTool(ws)
-        return await tool.execute(**arguments)
+        tool_inst = ListFilesTool(ws)
+        return await tool_inst.execute(**arguments)
     elif tool_name == "read_file":
-        tool = ReadFileTool(ws)
-        return await tool.execute(**arguments)
+        tool_inst = ReadFileTool(ws)
+        return await tool_inst.execute(**arguments)
     elif tool_name == "search_code":
-        tool = SearchCodeTool(ws)
-        return await tool.execute(**arguments)
+        tool_inst = SearchCodeTool(ws)
+        return await tool_inst.execute(**arguments)
+    elif tool_name == "run_tests":
+        tool_inst = RunTestsTool(ws.root)
+        res = tool_inst.execute(**arguments)
+        if inspect.isawaitable(res):
+            res = await res
+        if isinstance(res, dict):
+            return ToolResult(name=tool_name, success=res.get("success", False), data=res, error=res.get("error"))
+        return res
     else:
         return ToolResult(
             name=tool_name,

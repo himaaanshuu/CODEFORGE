@@ -7,16 +7,16 @@ from pydantic import BaseModel, Field
 # Model configuration from environment
 NEBIUS_BASE_URL: str = "https://api.tokenfactory.nebius.com/v1"
 NEBIUS_API_KEY: str
-NEBIUS_MODEL: str = "nvidia/nemotron-3-ultra-550b-a55b"
+NEBIUS_MODEL: str = "nvidia/Nemotron-3-Ultra-550b-a55b"
 
 # Try to load from environment at module level, but keep it configurable
 try:
     import os
     NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY", "")
-    NEBIUS_MODEL = os.getenv("NEBIUS_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
+    NEBIUS_MODEL = os.getenv("NEBIUS_MODEL", "nvidia/Nemotron-3-Ultra-550b-a55b")
 except ImportError:
     NEBIUS_API_KEY = ""
-    NEBIUS_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+    NEBIUS_MODEL = "nvidia/Nemotron-3-Ultra-550b-a55b"
 
 
 # --- Pydantic request/response models ---

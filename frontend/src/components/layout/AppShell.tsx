@@ -23,11 +23,11 @@ const phases: Record<AgentState, string> = {
     MODIFICATION: 'Applying code changes',
     TESTING: 'Running repository tests',
     FAILURE_ANALYSIS: 'Diagnosing test failure',
-    REPAIR: 'Repair attempt 1 of 5',
+    REPAIR: 'Repair attempt in progress',
     VERIFICATION: 'Checking final result',
-    COMPLETED: '31 tests passed',
+    COMPLETED: 'Task completed',
     FAILED: 'Unable to complete task safely',
-}
+  }
   if (lastEvent) {
     return `${lastEvent.time}  ${lastEvent.text}`
   }

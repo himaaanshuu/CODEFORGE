@@ -6,7 +6,7 @@ export function AgentStatus({ state, tone = 'light' }: { state: AgentState; tone
   return (
     <span
       className={`inline-flex items-center gap-2 font-display text-[0.6875rem] font-semibold tracking-[0.16em] ${
-        tone === 'dark' ? 'text-cream' : 'text-ink'
+        tone === 'dark' ? 'text-on-accent' : 'text-ink'
       }`}
       role="status"
       aria-live="polite"
