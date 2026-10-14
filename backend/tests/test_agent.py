@@ -224,6 +224,65 @@ def test_agent_event_types() -> None:
     print("PASS: test_agent_event_types")
 
 
+@pytest.mark.asyncio
+async def test_agent_task_uses_selected_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The agent loop must call the LLM with the selected model.
+
+    Stubs the single LLM call site so no network is involved; asserts the
+    Super model ID (resolved from its display label) reaches the client
+    call and is reported back on the response.
+    """
+    import tempfile
+    from types import SimpleNamespace
+
+    import backend.app.agent.agent as agent_mod
+
+    seen: dict[str, Any] = {}
+
+    async def _stub(prompt: str, model: Any = None, **kwargs: Any) -> Any:
+        seen["model"] = model
+        return SimpleNamespace(
+            success=False,
+            error="stubbed llm failure",
+            usage={},
+            model=model,
+            response="",
+        )
+
+    monkeypatch.setattr(agent_mod, "_call_llm_with_prompt", _stub)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = await run_agent_task(
+            workspace_root=tmpdir,
+            task="anything",
+            model="Nemotron 3 Super",
+        )
+
+    assert seen["model"] == "nvidia/nemotron-3-super-120b-a12b"
+    assert result.model == "nvidia/nemotron-3-super-120b-a12b"
+    assert result.success is False
+
+    print("PASS: test_agent_task_uses_selected_model")
+
+
+@pytest.mark.asyncio
+async def test_agent_task_rejects_unknown_model() -> None:
+    """An invalid model must fail before any LLM call or workspace work."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with pytest.raises(ValueError, match="Unknown model"):
+            await run_agent_task(
+                workspace_root=tmpdir,
+                task="anything",
+                model="not-a-real-model",
+            )
+
+    print("PASS: test_agent_task_rejects_unknown_model")
+
+
 def main() -> None:
     """Run all agent unit tests."""
     tests = [
@@ -235,6 +294,13 @@ def main() -> None:
         test_agent_observation_creation,
         test_agent_response_creation,
         test_agent_event_types,
+    ]
+
+    async_tests = [
+        test_agent_task_without_llm,
+        # test_agent_task_uses_selected_model needs pytest's monkeypatch
+        # fixture, so it only runs under pytest, not this script runner.
+        test_agent_task_rejects_unknown_model,
     ]
 
     passed = 0
@@ -250,13 +316,14 @@ def main() -> None:
             print(f"ERROR: {test.__name__}: {e}")
             failed += 1
 
-    # Also run the async test
-    try:
-        asyncio.run(test_agent_task_without_llm())
-        passed += 1
-    except Exception as e:
-        print(f"ERROR: test_agent_task_without_llm: {e}")
-        failed += 1
+    # Also run the async tests
+    for async_test in async_tests:
+        try:
+            asyncio.run(async_test())
+            passed += 1
+        except Exception as e:
+            print(f"ERROR: {async_test.__name__}: {e}")
+            failed += 1
 
     print(f"\n{'='*50}")
     print(f"Agent tests: {passed} passed, {failed} failed")

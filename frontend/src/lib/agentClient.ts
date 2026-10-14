@@ -72,6 +72,18 @@ export interface FilePayload {
   bytes: number
 }
 
+/** Display label → Nebius model ID for the agent model picker. */
+export const MODEL_IDS: Record<string, string> = {
+  'Nemotron 3 Ultra': 'nvidia/Nemotron-3-Ultra-550b-a55b',
+  'Nemotron 3 Super': 'nvidia/nemotron-3-super-120b-a12b',
+  'Nemotron 3 Nano': 'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B',
+}
+
+/** Map a picker label (or a raw model ID) to the ID sent to the backend. */
+export function modelForLabel(label: string): string {
+  return MODEL_IDS[label] ?? label
+}
+
 // --- Helpers --------------------------------------------------------------
 
 const TOOL_STATE: Record<string, AgentState> = {
@@ -249,6 +261,7 @@ export async function startAgentTask(
   workspaceId: string = 'local-project',
   onEvent: (event: ActivityEvent) => void,
   onComplete: (run: AgentRunView) => void,
+  model?: string,
 ): Promise<void> {
   onEvent({ id: 'ev-0', time: clock(), text: `Task accepted: ${task}`, state: 'ANALYZING', status: 'done' })
 
@@ -256,7 +269,7 @@ export async function startAgentTask(
     const response = await fetch(`${API_BASE}/agent/analyze`, {
       method: 'POST',
       headers: await authedHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ workspace_id: workspaceId, task }),
+      body: JSON.stringify({ workspace_id: workspaceId, task, ...(model ? { model } : {}) }),
     })
 
     if (!response.ok) {

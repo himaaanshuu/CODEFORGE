@@ -76,6 +76,7 @@ async def run_agent_task(
     workspace_root: str,
     task: str,
     max_iterations: Optional[int] = None,
+    model: Optional[str] = None,
 ) -> AgentResponse:
     """Run the CodeForge AI coding agent on a given task.
 
@@ -85,14 +86,24 @@ async def run_agent_task(
     3. Loops: Sends prompt + tool results to NVIDIA model -> Gets response -> Executes tools
     4. Stops when task is complete, iterations exceeded, or error occurs
 
+    Args:
+        workspace_root: Configured workspace directory the agent may touch.
+        task: Coding task description.
+        max_iterations: Override for the default iteration cap.
+        model: Nebius model ID or display label (e.g. "Nemotron 3 Super").
+            ``None``/empty selects the default Ultra model. Invalid values
+            raise ``ValueError`` before any LLM call is made.
+
     Returns an AgentResponse with the analysis results.
     """
     if max_iterations is None:
         max_iterations = MAX_DEFAULT_ITERATIONS
 
+    from ..llm.models import resolve_model
+
+    model_name = resolve_model(model)
     started_at = time.monotonic()
     total_tokens = 0
-    model_name = ""
 
     # Initialize workspace and agent state
     ws = Workspace(workspace_root)
@@ -182,7 +193,7 @@ async def run_agent_task(
         # Generate the next step from the LLM
         llm_response = await _call_llm_with_prompt(
             prompt=combined_prompt,
-            model=None,
+            model=model_name,
             temperature=0.7,
             max_tokens=1000,
         )

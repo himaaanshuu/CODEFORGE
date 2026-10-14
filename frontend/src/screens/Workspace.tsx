@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { AgentController } from '../hooks/useAgentRun'
 import type { RepoNode, RepoSummary, RunTab, ViewId } from '../types'
-import { fetchFile, fetchTree, cloneGitHubRepo } from '../lib/agentClient'
+import { fetchFile, fetchTree, cloneGitHubRepo, modelForLabel } from '../lib/agentClient'
 import { fetchGitHubRepos } from '../lib/githubClient'
 import { scorePrompt } from '../lib/promptScore'
 import { AgentActivity } from '../components/agent/AgentActivity'
@@ -137,7 +137,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
     const task = prompt.trim()
     if (!task || agent.running) return
     setTab('activity')
-    agent.start(task, workspaceId)
+    agent.start(task, workspaceId, modelForLabel(model))
   }
 
   const changedPaths = agent.run?.filesChanged ?? []

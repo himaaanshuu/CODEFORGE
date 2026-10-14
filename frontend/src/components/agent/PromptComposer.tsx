@@ -5,7 +5,7 @@ import { fmtK, fmtUsd } from '../../lib/format'
 import { Button } from '../ui/Button'
 import { useState } from 'react'
 
-const MODELS = ['Nemotron 3 Ultra', 'Nemotron 3 Super']
+const MODELS = ['Nemotron 3 Ultra', 'Nemotron 3 Super', 'Nemotron 3 Nano']
 
 interface Props {
   value: string

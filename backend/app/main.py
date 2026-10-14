@@ -409,6 +409,31 @@ class AgentRequest(BaseModel):
     workspace_id: str = "local-project"
     task: str
     max_iterations: int | None = None
+    model: str | None = None
+
+
+def _agent_error_envelope(detail: str, max_iterations: int) -> dict:
+    return {
+        "success": False,
+        "status": "error",
+        "summary": detail,
+        "files_inspected": [],
+        "tools_used": [],
+        "plan": [],
+        "observations": [],
+        "error": detail,
+        "iteration": 0,
+        "files_changed": [],
+        "modification_count": 0,
+        "diff_summary": "",
+        "tokens_used": 0,
+        "duration_seconds": 0.0,
+        "model": "",
+        "repair_attempts": 0,
+        "max_repair_iterations": 5,
+        "max_iterations": max_iterations,
+        "phase": "",
+    }
 
 
 @app.post("/api/v1/agent/analyze")
@@ -424,8 +449,16 @@ async def agent_analyze(
     and real run metrics (duration, tokens, model).
     """
     from .agent.agent import run_agent_task
+    from .llm.models import resolve_model
 
     max_iterations = request.max_iterations or 10
+
+    # Strict allow-list on the model as well: unknown IDs/labels are rejected
+    # before any work happens, so a bad value can never silently run on Ultra.
+    try:
+        model_name = resolve_model(request.model)
+    except ValueError as exc:
+        return _agent_error_envelope(str(exc), max_iterations)
 
     # Strict allow-list: the agent may only operate on configured workspaces —
     # never on an arbitrary path supplied by the client.
@@ -433,32 +466,13 @@ async def agent_analyze(
 
     if workspace_root is None or not os.path.isdir(workspace_root):
         detail = f"Unknown workspace: {request.workspace_id}"
-        return {
-            "success": False,
-            "status": "error",
-            "summary": detail,
-            "files_inspected": [],
-            "tools_used": [],
-            "plan": [],
-            "observations": [],
-            "error": detail,
-            "iteration": 0,
-            "files_changed": [],
-            "modification_count": 0,
-            "diff_summary": "",
-            "tokens_used": 0,
-            "duration_seconds": 0.0,
-            "model": "",
-            "repair_attempts": 0,
-            "max_repair_iterations": 5,
-            "max_iterations": max_iterations,
-            "phase": "",
-        }
+        return _agent_error_envelope(detail, max_iterations)
 
     response = await run_agent_task(
         workspace_root=workspace_root,
         task=request.task,
         max_iterations=max_iterations,
+        model=model_name,
     )
 
     data = response.model_dump()
@@ -473,6 +487,7 @@ class RunRequest(BaseModel):
     workspace_id: str = "local-project"
     task: str
     max_iterations: int | None = None
+    model: str | None = None
 
 
 def _metrics_from(data: dict) -> dict:
@@ -499,8 +514,13 @@ async def create_run(
     never executed without being recorded, and nothing is faked client-side.
     """
     from .agent.agent import run_agent_task
+    from .llm.models import resolve_model
 
     max_iterations = request.max_iterations or 10
+    try:
+        model_name = resolve_model(request.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     # Strict allow-list — same rule as /agent/analyze: no arbitrary paths.
     workspace_root = WORKSPACE_MAPPING.get(request.workspace_id)
     if workspace_root is None:
@@ -523,6 +543,7 @@ async def create_run(
             workspace_root=workspace_root,
             task=request.task,
             max_iterations=max_iterations,
+            model=model_name,
         )
         data = response.model_dump()
         data["max_iterations"] = max_iterations

@@ -767,8 +767,14 @@ flowchart LR
 
 ### Model configuration
 
+The agent tab offers a model picker: **Ultra** for serious reasoning,
+**Super** / **Nano** for faster, cheaper runs. The choice is sent with the
+run request and enforced server-side against an allow-list.
+
 ```env
-NEBIUS_MODEL=nvidia/nemotron-3-ultra-550b-a55b
+NEBIUS_MODEL=nvidia/Nemotron-3-Ultra-550b-a55b
+NEBIUS_SUPER_MODEL=nvidia/nemotron-3-super-120b-a12b
+NEBIUS_NANO_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
 ```
 
@@ -817,7 +823,7 @@ CODEFORGE/
 │   ├── requirements.txt             # Python dependencies
 │   ├── .env.example                 # Copy to .env (gitignored)
 │   │
-│   └── tests/                       # 84 unit and integration tests (all passing)
+│   └── tests/                       # 91 unit and integration tests (all passing)
 │       ├── test_agent.py            # Agent loop, events & failure recovery
 │       ├── test_api.py              # Workspace, file & tree API endpoints
 │       ├── test_auth.py             # JWT signature, expiration, algorithm tests
@@ -964,7 +970,10 @@ Then fill in (matches `backend/.env.example` exactly):
 # --- Nebius Token Factory (NVIDIA Nemotron) ---
 NEBIUS_API_KEY=your_nebius_api_key
 NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
+# Agent model picker: Ultra (default, serious reasoning) + Super/Nano (faster, cheaper)
 NEBIUS_MODEL=nvidia/Nemotron-3-Ultra-550b-a55b
+NEBIUS_SUPER_MODEL=nvidia/nemotron-3-super-120b-a12b
+NEBIUS_NANO_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 DEBUG=False
 
 # --- Supabase (Auth verification + PostgREST run persistence) ---
@@ -1068,15 +1077,15 @@ python -m pytest -v
 python -m pytest -v
 ```
 
-**84 / 84 tests passing:**
+**91 / 91 tests passing:**
 
 | Test Suite | Tests | Scope |
 |---|---|---|
-| `tests/test_agent.py` | 9 | Agent loop, state machine, lifecycle events |
-| `tests/test_api.py` | 15 | Workspaces, tree, file, clone, runs endpoints |
+| `tests/test_agent.py` | 11 | Agent loop, state machine, lifecycle events, model selection |
+| `tests/test_api.py` | 18 | Workspaces, tree, file, clone, runs endpoints, model allow-list |
 | `tests/test_auth.py` | 18 | Real HS256 JWT validation, expiration, algorithm whitelist |
 | `tests/test_auth_middleware.py` | 9 | Pre-routing 401/503 fail-closed logic & CORS |
-| `tests/test_llm.py` | 4 | Nebius Token Factory client & model configuration |
+| `tests/test_llm.py` | 6 | Nebius Token Factory client, model configuration & resolution |
 | `tests/test_supabase.py` | 17 | Run persistence, ownership isolation & RLS policies |
 | `tests/test_workspace_security.py` | 12 | Path traversal prevention & chroot boundaries |
 

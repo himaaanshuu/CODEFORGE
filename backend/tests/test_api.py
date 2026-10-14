@@ -127,6 +127,47 @@ def test_analyze_rejects_unknown_workspace_without_llm_call() -> None:
     assert data["tokens_used"] == 0
 
 
+def test_analyze_accepts_super_model_label() -> None:
+    # A valid model label must not block the request: with an unknown
+    # workspace the failure must still be about the workspace, not the model.
+    resp = client.post(
+        "/api/v1/agent/analyze",
+        json={
+            "workspace_id": "/definitely/not/a/real/dir",
+            "task": "anything",
+            "model": "Nemotron 3 Super",
+        },
+    )
+    assert resp.status_code == 200
+    assert "Unknown workspace" in resp.json()["error"]
+
+
+def test_analyze_accepts_super_model_id() -> None:
+    resp = client.post(
+        "/api/v1/agent/analyze",
+        json={
+            "workspace_id": "/definitely/not/a/real/dir",
+            "task": "anything",
+            "model": "nvidia/nemotron-3-super-120b-a12b",
+        },
+    )
+    assert resp.status_code == 200
+    assert "Unknown workspace" in resp.json()["error"]
+
+
+def test_analyze_rejects_unknown_model_without_llm_call() -> None:
+    # Fail-closed on the model too: rejected before any workspace work or
+    # LLM call, so a bad value can never silently run on Ultra.
+    resp = client.post(
+        "/api/v1/agent/analyze",
+        json={"workspace_id": "local-project", "task": "anything", "model": "not-a-model"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is False
+    assert "Unknown model" in data["error"]
+
+
 def test_workspace_mapping_points_at_this_project() -> None:
     # Must point at this checkout regardless of the directory name it was
     # cloned into (e.g. "codeforge-ai", "CODEFORGE", ...).

@@ -18,6 +18,8 @@ from backend.app.llm.models import (
     get_model_name,
     get_base_url,
     get_api_key,
+    resolve_model,
+    known_model_ids,
 )
 from backend.app.llm.client import NebiusClient
 
@@ -67,6 +69,36 @@ def test_health_check_response_types() -> None:
         assert h.status == status
 
     print("PASS: test_health_check_response_types")
+
+
+def test_resolve_model_defaults_and_labels() -> None:
+    """resolve_model maps empty/labels/IDs to concrete allow-listed IDs."""
+    import backend.app.llm.models as llm_models
+
+    ultra, super_, nano = known_model_ids()
+    assert ultra == "nvidia/Nemotron-3-Ultra-550b-a55b"
+
+    assert resolve_model(None) == ultra
+    assert resolve_model("") == ultra
+    assert resolve_model("Nemotron 3 Ultra") == ultra
+    assert resolve_model("nemotron 3 super") == super_
+    assert resolve_model("Nemotron 3 Nano") == nano
+    assert resolve_model(super_) == super_
+    assert resolve_model(nano) == nano
+    assert isinstance(llm_models.NEBIUS_SUPER_MODEL, str)
+    assert isinstance(llm_models.NEBIUS_NANO_MODEL, str)
+
+    print("PASS: test_resolve_model_defaults_and_labels")
+
+
+def test_resolve_model_rejects_unknown() -> None:
+    """Unknown model values raise instead of silently falling back."""
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="Unknown model"):
+        resolve_model("gpt-999")
+
+    print("PASS: test_resolve_model_rejects_unknown")
 
 
 # Async test - run separately with asyncio
