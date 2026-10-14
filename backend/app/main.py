@@ -292,6 +292,16 @@ async def clone_repo(
     if ws_id in WORKSPACE_MAPPING and dest.is_dir():
         return _register_workspace(ws_id, dest)
 
+    import shutil
+
+    if dest.is_dir():
+        if (dest / ".git").is_dir():
+            # A clone from a previous process still exists on disk. Workspace
+            # registration is in-memory and resets on restart — adopt it
+            # instead of failing on a non-empty destination.
+            return _register_workspace(ws_id, dest)
+        shutil.rmtree(dest, ignore_errors=True)
+
     _CLONE_ROOT.mkdir(parents=True, exist_ok=True)
     url = f"https://github.com/{owner}/{name}.git"
     try:
@@ -305,8 +315,6 @@ async def clone_repo(
         raise HTTPException(status_code=504, detail="git clone timed out") from exc
     if result.returncode != 0:
         # Never echo the full git output — surface a short, safe reason.
-        import shutil
-
         shutil.rmtree(dest, ignore_errors=True)
         stderr = (result.stderr or "").strip().splitlines()
         reason = stderr[-1] if stderr else f"git exited {result.returncode}"

@@ -192,25 +192,33 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
     stdout = "".join(stdout_chunks)
     stderr = "".join(stderr_chunks)
 
-    # Simple parsing of pytest output
+    # Parse each count independently — pytest omits zero counts entirely
+    # (e.g. "84 passed, 15 warnings in 0.40s") and ordering varies.
+    output_text = stdout + stderr
     passed = 0
     failed = 0
     skipped = 0
     errors = 0
 
-    # Pattern: "N passed, M failed, K skipped"
-    summary_match = re.search(
-        r"(\d+)\s+passed\s+(\d+)\s+failed\s+(\d+)\s+skipped",
-        stdout + stderr,
-        re.IGNORECASE,
-    )
-    if summary_match:
-        passed = int(summary_match.group(1))
-        failed = int(summary_match.group(2))
-        skipped = int(summary_match.group(3))
+    # Case-sensitive on purpose: verbose per-test lines end in uppercase
+    # PASSED/FAILED and can contain digits (e.g. "..._is_401 PASSED"), while
+    # the final summary line is lowercase ("84 passed, 15 warnings in ...").
+    passed_match = re.search(r"(\d+)\s+passed", output_text)
+    if passed_match:
+        passed = int(passed_match.group(1))
 
-    # Pattern: "ERROR: N errors"
-    error_match = re.search(r"ERROR[:\s]+(\d+)", stdout + stderr, re.IGNORECASE)
+    failed_match = re.search(r"(\d+)\s+failed", output_text)
+    if failed_match:
+        failed = int(failed_match.group(1))
+
+    skipped_match = re.search(r"(\d+)\s+skipped", output_text)
+    if skipped_match:
+        skipped = int(skipped_match.group(1))
+
+    # Pattern: "ERROR: N errors" / "N errors"
+    error_match = re.search(r"ERROR[:\s]+(\d+)", output_text, re.IGNORECASE)
+    if not error_match:
+        error_match = re.search(r"(\d+)\s+errors?\b", output_text, re.IGNORECASE)
     if error_match:
         errors = int(error_match.group(1))
 

@@ -197,6 +197,17 @@
   }
 }
 
+/* Logo sparkle: gentle pulse on the CF mark's sparkle glyph. */
+@keyframes cf-sparkle {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+.cf-sparkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cf-sparkle 2.4s ease-in-out infinite;
+}
+
 /* Reduced motion: collapse CSS animation/transition; framer handled in code. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

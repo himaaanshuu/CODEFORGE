@@ -32,13 +32,9 @@ export default function App() {
   }
 
   if (auth.status === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg">
-        <p className="font-display text-[0.6875rem] font-semibold tracking-[0.32em] text-subtle">
-          CODEFORGE AI
-        </p>
-      </div>
-    )
+    // No splash/intro screen: the first auth callback resolves immediately
+    // from storage, so render nothing rather than an animation overlay.
+    return null
   }
 
   if (route === 'landing') {

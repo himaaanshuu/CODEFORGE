@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
 import type { AgentState, ActivityEvent } from '../../types'
 import { stateMeta } from '../../lib/agentState'
 
@@ -35,13 +34,9 @@ const phases: Record<AgentState, string> = {
 }
 
 export function AppShell({ header, sidebar, children, state, lastEvent }: Props) {
-  const reduce = useReducedMotion()
   const meta = stateMeta[state]
   return (
-    <motion.div
-      className="flex h-screen min-h-0 flex-col"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduce ? 0.1 : 0.5 }}
-    >
+    <div className="flex h-screen min-h-0 flex-col">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:bg-cream focus:px-3 focus:py-2">Skip to content</a>
       {header}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
@@ -54,6 +49,6 @@ export function AppShell({ header, sidebar, children, state, lastEvent }: Props)
         <span className="font-mono">{meta.label}</span>
         <span className="truncate text-muted">{getStatusText(state, lastEvent)}</span>
       </footer>
-    </motion.div>
+    </div>
   )
 }

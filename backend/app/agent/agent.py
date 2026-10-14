@@ -37,6 +37,7 @@ from .prompts import get_system_prompt, get_agent_instructions
 from .state import AgentState
 from ..repository.workspace import Workspace
 from ..tools.registry import ToolRegistry
+from ..tools.base import ToolResult as BaseToolResult
 from ..tools.repository_tools import ListFilesTool, ReadFileTool, SearchCodeTool
 from ..tools.modification_tools import ApplyPatchTool, InspectDiffTool, WriteFileTool
 from ..tools.execution_tools import RunTestsTool
@@ -287,13 +288,14 @@ async def run_agent_task(
 
             # Check if this was a test execution and handle results
             if tool_name == "run_tests":
-                # Parse test results
-                test_summary = tool_result.data.get("test_summary", {}) if tool_result.data else {}
+                # Parse test results from the tool's data payload
+                data = tool_result.data if isinstance(tool_result.data, dict) else {}
+                test_summary = data.get("test_summary", {}) or {}
                 failed_count = test_summary.get("failed", 0)
                 error_count = test_summary.get("errors", 0)
-                timed_out = tool_result.timed_out
+                timed_out = bool(data.get("timed_out", False))
 
-                state.set_tests_results(tool_result.data or {})
+                state.set_tests_results(data)
 
                 if failed_count > 0 or error_count > 0 or timed_out:
                     # Tests failed - trigger failure analysis
@@ -425,7 +427,10 @@ def _build_combined_prompt(
         else:
             label = "Tool failed"
 
-        obs_text = getattr(obs, "observation", obs.get("observation", "No observation"))
+        if isinstance(obs, dict):
+            obs_text = obs.get("observation", "No observation")
+        else:
+            obs_text = getattr(obs, "observation", None) or "No observation"
         parts.append(f"{label}: {obs_text}")
 
     parts.append("Next step:")
@@ -456,12 +461,68 @@ async def _call_llm_with_prompt(
     return response
 
 
+def _extract_json_object(text: str) -> Optional[Dict[str, Any]]:
+    """Find the first parseable JSON object in a free-form LLM response."""
+    import re
+
+    candidates: List[str] = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.S)
+    candidates.extend(
+        text[idx:] for idx in (i for i, ch in enumerate(text) if ch == "{")
+    )
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        try:
+            obj, _ = decoder.raw_decode(candidate.lstrip())
+        except ValueError:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
+_KNOWN_TOOLS = (
+    "list_files",
+    "read_file",
+    "search_code",
+    "apply_patch",
+    "inspect_diff",
+    "write_file",
+    "run_tests",
+)
+# Tools whose execution requires these arguments — a call without them
+# would only produce a TypeError, so treat the mention as prose instead.
+_TOOLS_REQUIRING_ARGS = {
+    "read_file": "path",
+    "search_code": "query",
+    "write_file": "path",
+    "apply_patch": "patch",
+}
+
+
+def _normalize_plan(items: Any) -> List[str]:
+    plan: List[str] = []
+    if isinstance(items, str):
+        items = [items]
+    if isinstance(items, list):
+        for item in items:
+            line = str(item).strip()
+            if line.startswith("- "):
+                line = line[2:]
+            if line:
+                plan.append(line)
+    return plan
+
+
 def _parse_llm_response(response_text: str) -> Dict[str, Any]:
     """Parse the LLM's response to determine the next action.
 
     Returns a dict with keys:
-    - type: "tool_call", "final_analysis", or "error"
+    - type: "tool_call", "final_analysis", "error", or "thinking"
     - Corresponding fields depend on the type.
+
+    The agent prompt requires a single JSON object per turn
+    ({"tool": name, "arguments": {...}} or {"final": {...}}), but the
+    legacy plain-text markers are still accepted so either style works.
     """
     text = response_text.strip()
 
@@ -491,31 +552,58 @@ def _parse_llm_response(response_text: str) -> Dict[str, Any]:
         error_msg = parts[1].strip() if len(parts) > 1 else text
         return {"type": "error", "error": error_msg}
 
-    # Check for tool call pattern
-    # Look for structured JSON or clear tool invocation
-    # Pattern: "Tool: list_files, Args: {...}" or JSON-like
-    tool_patterns = [
-        ("list_files", lambda t: {"tool_name": "list_files", "arguments": {}}),
-        ("read_file", lambda t: {"tool_name": "read_file", "arguments": {}}),
-        ("search_code", lambda t: {"tool_name": "search_code", "arguments": {}}),
-    ]
+    # Preferred: structured JSON response — tool call or final answer
+    obj = _extract_json_object(text)
+    if obj is not None:
+        final = obj.get("final")
+        if isinstance(final, dict):
+            return {
+                "type": "final_analysis",
+                "summary": str(final.get("summary") or "Analysis completed"),
+                "plan": _normalize_plan(final.get("plan")),
+            }
+        if obj.get("type") in ("final", "final_analysis"):
+            return {
+                "type": "final_analysis",
+                "summary": str(obj.get("summary") or "Analysis completed"),
+                "plan": _normalize_plan(obj.get("plan")),
+            }
+        if isinstance(obj.get("error"), str):
+            return {"type": "error", "error": obj["error"]}
 
-    for tool_name, extractor in tool_patterns:
-        if tool_name in text.lower():
-            # Try to extract arguments
-            args_extracted = extractor(text)
-            # Heuristic: if the response mentions specific paths or queries,
-            # we should construct reasonable arguments
-            if args_extracted["tool_name"] == "search_code" and "query" not in str(
-                extractor
-            ):
-                # Try to find a search query in the text
-                import re
-                match = re.search(r'"([^"]+)"', text)
-                if match:
-                    query = match.group(1)
-                    args_extracted["arguments"] = {"query": query}
-            return {"type": "tool_call", "tool_name": args_extracted["tool_name"], "arguments": {}}
+        name = obj.get("tool") or obj.get("tool_name")
+        args = obj.get("arguments", obj.get("args", obj.get("input")))
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except ValueError:
+                args = None
+        if isinstance(name, str) and name in _KNOWN_TOOLS and isinstance(args, dict):
+            return {"type": "tool_call", "tool_name": name, "arguments": args}
+
+    # Legacy fallback: prose that mentions a known tool — only treat it as a
+    # call when we can also recover its required arguments from JSON-ish text.
+    lowered = text.lower()
+    for tool_name in _KNOWN_TOOLS:
+        if tool_name not in lowered:
+            continue
+        arguments: Dict[str, Any] = {}
+        inner = _extract_json_object(text)
+        if isinstance(inner, dict):
+            inner_name = inner.get("tool") or inner.get("tool_name")
+            inner_args = inner.get("arguments", inner.get("args"))
+            if inner_name == tool_name and isinstance(inner_args, dict):
+                arguments = inner_args
+        required = _TOOLS_REQUIRING_ARGS.get(tool_name)
+        if required and required not in arguments:
+            import re
+
+            match = re.search(rf'"{required}"\s*:\s*"([^"]+)"', text)
+            if match:
+                arguments[required] = match.group(1)
+        if required and required not in arguments:
+            continue  # prose mention without usable arguments
+        return {"type": "tool_call", "tool_name": tool_name, "arguments": arguments}
 
     # Default: if we have some text but can't parse it, treat as thinking/continuing
     return {"type": "thinking", "raw_text": text}
@@ -537,18 +625,25 @@ async def _execute_tool(
             res = tool.execute(**arguments)
             if inspect.isawaitable(res):
                 res = await res
+            if isinstance(res, BaseToolResult):
+                return ToolResult(
+                    tool_name=tool_name,
+                    success=res.success,
+                    data=res.data,
+                    error=res.error,
+                )
             if isinstance(res, ToolResult):
                 return res
             if isinstance(res, dict):
                 return ToolResult(
-                    name=tool_name,
+                    tool_name=tool_name,
                     success=res.get("success", False),
                     data=res,
                     error=res.get("error"),
                 )
-            return ToolResult(name=tool_name, success=True, data=res)
+            return ToolResult(tool_name=tool_name, success=True, data=res)
         except Exception as exc:
-            return ToolResult(name=tool_name, success=False, error=str(exc))
+            return ToolResult(tool_name=tool_name, success=False, error=str(exc))
 
     # Fall back to direct tool execution
     if tool_name == "list_files":
@@ -565,12 +660,21 @@ async def _execute_tool(
         res = tool_inst.execute(**arguments)
         if inspect.isawaitable(res):
             res = await res
+        if isinstance(res, BaseToolResult):
+            return ToolResult(
+                tool_name=tool_name,
+                success=res.success,
+                data=res.data,
+                error=res.error,
+            )
         if isinstance(res, dict):
-            return ToolResult(name=tool_name, success=res.get("success", False), data=res, error=res.get("error"))
-        return res
+            return ToolResult(tool_name=tool_name, success=res.get("success", False), data=res, error=res.get("error"))
+        if isinstance(res, ToolResult):
+            return res
+        return ToolResult(tool_name=tool_name, success=True, data=res)
     else:
         return ToolResult(
-            name=tool_name,
+            tool_name=tool_name,
             success=False,
             error=f"Unknown tool: {tool_name}",
         )

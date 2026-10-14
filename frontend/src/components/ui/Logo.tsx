@@ -1,5 +1,9 @@
 import { useId } from 'react'
 
+/**
+ * CodeForge AI logo mark — metallic CF monogram with glowing code brackets
+ * and a sparkle, recreated as scalable SVG (works on light and dark themes).
+ */
 export function LogoMark({ className = '' }: { className?: string }) {
   const uid = useId().replace(/:/g, '')
   const silver = `${uid}-silver`
@@ -48,6 +52,7 @@ export function LogoMark({ className = '' }: { className?: string }) {
 
       {/* Sparkle */}
       <path
+        className="cf-sparkle"
         d="M 72 0 C 74 8 77 11 86 12 C 77 13 74 16 72 24 C 70 16 67 13 58 12 C 67 11 70 8 72 0 Z"
         fill={`url(#${blue})`}
         filter={`url(#${glow})`}

@@ -273,6 +273,15 @@ Available tools:
    - Only use when apply_patch cannot achieve the desired change
    - Must be inside the repository workspace
 
+7. run_tests: Run the repository test suite
+   - Input: {{"test_command": "pytest"}}  (optional — defaults to pytest)
+   - Output: {{"success": bool, "test_summary": {{"passed": N, "failed": N, ...}}, ...}}
+
+Response format (REQUIRED — respond with exactly ONE JSON object, no prose):
+- Call a tool:   {{"tool": "<tool_name>", "arguments": {{...}}}}
+- Finish task:   {{"final": {{"summary": "one-paragraph result", "plan": ["step 1", "step 2"]}}}}
+Never answer with plain prose while the task is unfinished.
+
 Rules:
 - Never assume file contents - always use the tools
 - Inspect the repository structure first with list_files

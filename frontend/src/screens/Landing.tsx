@@ -1,7 +1,5 @@
-import { useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { BookOpen, FlaskConical, Hammer, ListChecks, Search, ShieldCheck, Wrench, type LucideIcon } from 'lucide-react'
-import { IntroAnimation } from '../components/intro/IntroAnimation'
 import { Button } from '../components/ui/Button'
 import { Logo } from '../components/ui/Logo'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
@@ -31,7 +29,6 @@ const toneRing = (t?: Tone) => (t === 'bad' ? 'border-bad text-bad' : t === 'ok'
 
 export function Landing({ theme, onToggleTheme, onStart }: Props) {
   const reduce = useReducedMotion()
-  const [showIntro, setShowIntro] = useState(true)
   const rise = (i: number) =>
     reduce ? {} : {
       initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 },
@@ -40,9 +37,6 @@ export function Landing({ theme, onToggleTheme, onStart }: Props) {
 
   return (
     <div className="min-h-screen">
-      <AnimatePresence>
-        {showIntro && <IntroAnimation onDone={() => setShowIntro(false)} />}
-      </AnimatePresence>
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-5">
         <Logo className="text-[0.9375rem]" />
         <nav aria-label="Primary" className="hidden items-center gap-7 text-sm text-subtle md:flex">
