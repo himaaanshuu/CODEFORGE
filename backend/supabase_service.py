@@ -193,6 +193,12 @@ def finish_run(
 
     # Event timeline (server-written; clients cannot create these).
     for i, event in enumerate(events):
+        # Merge the event's top-level fields (tool_name, observation, ...) into
+        # the data column so API consumers get the full payload, not just type.
+        event_data = dict(event.get("data") or {})
+        for key, value in event.items():
+            if key not in ("type", "timestamp", "data"):
+                event_data.setdefault(key, value)
         _request(
             "POST",
             RUN_EVENTS,
@@ -203,7 +209,7 @@ def finish_run(
                 "seq": float(i),
                 "type": event.get("type", ""),
                 "timestamp": float(event.get("timestamp", 0.0)),
-                "data": event.get("data", {}),
+                "data": event_data,
                 "created_at": now,
             },
         )

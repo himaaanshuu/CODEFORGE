@@ -21,7 +21,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from .. import supabase_service as store
+from backend import supabase_service as store
 from ..auth_dep import get_current_user
 
 app = FastAPI(
@@ -136,7 +136,47 @@ def _git_branch(root: Path) -> str:
     return ""
 
 
+def _adopt_existing_clones() -> None:
+    """Re-register on-disk clones that the in-memory mapping lost.
+
+    WORKSPACE_MAPPING resets on every backend restart while cloned_repos/
+    persists, which used to strand clones as "Unknown workspace". Scanning
+    the clone root for {owner}__{name} git checkouts and re-registering
+    their gh-{owner}-{name} ids makes resolution self-healing. Only real
+    git checkouts whose parts pass the GitHub name rules are adopted.
+    """
+    try:
+        entries = list(_CLONE_ROOT.iterdir())
+    except OSError:
+        return
+    for entry in entries:
+        if not entry.is_dir() or "__" not in entry.name:
+            continue
+        owner, _, name = entry.name.partition("__")
+        if not owner or not name:
+            continue
+        if not _GITHUB_OWNER_RE.fullmatch(owner) or not _GITHUB_NAME_RE.fullmatch(name):
+            continue
+        if not (entry / ".git").is_dir():
+            continue
+        ws_id = f"gh-{owner}-{name}"
+        if WORKSPACE_MAPPING.get(ws_id) != str(entry):
+            WORKSPACE_MAPPING[ws_id] = str(entry)
+
+
 def _resolve_workspace(workspace_id: str) -> Path | None:
+    root = WORKSPACE_MAPPING.get(workspace_id)
+    if root is not None:
+        path = Path(root)
+        if path.is_dir():
+            return path
+        # Stale entry (directory deleted) — drop it unless it's built-in,
+        # then fall through to the on-disk adoption scan below.
+        if workspace_id != "local-project":
+            WORKSPACE_MAPPING.pop(workspace_id, None)
+    # Mapping miss (e.g. after a backend restart): re-adopt clones that
+    # still exist on disk before giving up.
+    _adopt_existing_clones()
     root = WORKSPACE_MAPPING.get(workspace_id)
     if root is None:
         return None
@@ -328,6 +368,8 @@ async def list_workspaces(
     user_uid: str = Depends(get_current_user),
 ) -> list[dict]:
     """List configured workspace roots with real git metadata."""
+    # Re-adopt on-disk clones so the picker repopulates after a restart.
+    _adopt_existing_clones()
     out: list[dict] = []
     for ws_id, root in WORKSPACE_MAPPING.items():
         path = Path(root)
@@ -461,15 +503,16 @@ async def agent_analyze(
         return _agent_error_envelope(str(exc), max_iterations)
 
     # Strict allow-list: the agent may only operate on configured workspaces —
-    # never on an arbitrary path supplied by the client.
-    workspace_root = WORKSPACE_MAPPING.get(request.workspace_id)
+    # never on an arbitrary path supplied by the client. _resolve_workspace
+    # also re-adopts on-disk clones lost by a backend restart.
+    resolved = _resolve_workspace(request.workspace_id)
 
-    if workspace_root is None or not os.path.isdir(workspace_root):
+    if resolved is None:
         detail = f"Unknown workspace: {request.workspace_id}"
         return _agent_error_envelope(detail, max_iterations)
 
     response = await run_agent_task(
-        workspace_root=workspace_root,
+        workspace_root=str(resolved),
         task=request.task,
         max_iterations=max_iterations,
         model=model_name,
@@ -522,12 +565,14 @@ async def create_run(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     # Strict allow-list — same rule as /agent/analyze: no arbitrary paths.
-    workspace_root = WORKSPACE_MAPPING.get(request.workspace_id)
-    if workspace_root is None:
+    # _resolve_workspace also re-adopts on-disk clones lost by a restart.
+    resolved = _resolve_workspace(request.workspace_id)
+    if resolved is None:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown workspace: {request.workspace_id}",
         )
+    workspace_root = str(resolved)
 
     run_id = store.start_run(
         user_uid,
