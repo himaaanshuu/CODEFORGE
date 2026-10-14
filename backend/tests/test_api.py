@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-from backend.app.main import WORKSPACE_MAPPING, app  # noqa: E402
+from backend.app.main import PROJECT_ROOT, WORKSPACE_MAPPING, app  # noqa: E402
 from backend.auth_dep import get_current_user  # noqa: E402
 
 # Workspace-logic tests focus on routing/paths, not identity. Supabase is
@@ -128,8 +128,12 @@ def test_analyze_rejects_unknown_workspace_without_llm_call() -> None:
 
 
 def test_workspace_mapping_points_at_this_project() -> None:
-    assert WORKSPACE_MAPPING["local-project"].endswith("codeforge-ai")
+    # Must point at this checkout regardless of the directory name it was
+    # cloned into (e.g. "codeforge-ai", "CODEFORGE", ...).
+    assert WORKSPACE_MAPPING["local-project"] == str(PROJECT_ROOT)
     assert os.path.isdir(WORKSPACE_MAPPING["local-project"])
+    assert os.path.isdir(os.path.join(WORKSPACE_MAPPING["local-project"], "backend"))
+    assert os.path.isdir(os.path.join(WORKSPACE_MAPPING["local-project"], "frontend"))
 
 
 def test_clone_rejects_invalid_owner() -> None:

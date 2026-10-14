@@ -779,7 +779,7 @@ NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
 # 📁 Project Structure
 
 ```text
-codeforge-ai/
+CODEFORGE/
 │
 ├── backend/
 │   ├── app/
@@ -815,12 +815,13 @@ codeforge-ai/
 │   ├── supabase_auth.py             # Supabase JWT token verification
 │   ├── supabase_service.py          # Supabase PostgREST persistence service
 │   ├── requirements.txt             # Python dependencies
+│   ├── .env.example                 # Copy to .env (gitignored)
 │   │
 │   └── tests/                       # 84 unit and integration tests (all passing)
 │       ├── test_agent.py            # Agent loop, events & failure recovery
 │       ├── test_api.py              # Workspace, file & tree API endpoints
 │       ├── test_auth.py             # JWT signature, expiration, algorithm tests
-│       ├── test_auth_middleware.py   # HTTP middleware 401/503 & CORS verification
+│       ├── test_auth_middleware.py  # HTTP middleware 401/503 & CORS verification
 │       ├── test_llm.py              # LLM client & configuration tests
 │       ├── test_supabase.py         # Persistence, RLS & user isolation
 │       ├── test_workspace_security.py # Path traversal & boundary protection
@@ -845,6 +846,7 @@ codeforge-ai/
 │   │   ├── index.css                # Editorial styling, CSS variables & typography
 │   │   └── main.tsx                 # React DOM root entry
 │   │
+│   ├── .env.local.example           # Copy to .env.local (gitignored)
 │   ├── package.json
 │   ├── tailwind.config.cjs
 │   └── vite.config.ts
@@ -853,6 +855,7 @@ codeforge-ai/
 │   └── migrations/
 │       └── 0001_init.sql            # PostgreSQL schema: runs, events, usage, RLS
 │
+├── pytest.ini                       # testpaths = backend/tests (run pytest from root)
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -864,43 +867,64 @@ codeforge-ai/
 
 # ⚙️ Installation
 
+> All commands below assume your terminal is at the **repository root**
+> (the folder containing `backend/`, `frontend/` and `pytest.ini`)
+> unless a `cd` is shown explicitly.
+
 ## Prerequisites
 
 ```text
-Python 3.11+
-Node.js 20+
+Python 3.11+  (verified with 3.14; backend/venv/ is the project virtualenv)
+Node.js 20+   (verified with Node 24 + npm 11)
 Git
-GitHub account
-Nebius account/API key
+Supabase project ( Auth + Postgres ) — dashboard access to copy API keys
+Nebius Token Factory API key (for NVIDIA Nemotron)
 ```
 
 ---
 
-# 📥 Clone Guide
+# 📥 Clone
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/codeforge-ai.git
-cd codeforge-ai
+git clone https://github.com/himaaanshuu/CODEFORGE.git
+cd CODEFORGE
 ```
 
-Replace `YOUR_USERNAME` with the GitHub owner.
+The checkout directory is `CODEFORGE` (capital letters). All follow-up
+commands use it as the working directory.
 
 ---
 
 # 🐍 Backend Setup
 
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+From the repository root. Skip the `venv` creation if `backend/venv/`
+already exists.
 
-Windows:
+Windows (PowerShell):
 
 ```powershell
-venv\Scripts\activate
-pip install -r requirements.txt
+python -m venv backend\venv
+.\backend\venv\Scripts\Activate.ps1
+python -m pip install -r backend\requirements.txt
+```
+
+Git Bash / macOS / Linux:
+
+```bash
+python3 -m venv backend/venv
+source backend/venv/Scripts/activate   # Windows Git Bash
+# source backend/venv/bin/activate     # macOS / Linux
+python -m pip install -r backend/requirements.txt
+```
+
+Then create the backend env file (see [Environment Variables](#-environment-variables)):
+
+```powershell
+copy backend\.env.example backend\.env
+```
+
+```bash
+cp backend/.env.example backend/.env
 ```
 
 ---
@@ -912,45 +936,78 @@ cd frontend
 npm install
 ```
 
+Then create the frontend env file (see below) before `npm run dev`:
+
+```bash
+cp .env.local.example .env.local   # Windows: copy .env.local.example .env.local
+```
+
 ---
 
 # 🔑 Environment Variables
 
 ### Backend (`backend/.env`)
 
-Copy from `backend/.env.example`:
+Create it from the example (from the repo root):
+
+```powershell
+copy backend\.env.example backend\.env
+```
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Then fill in (matches `backend/.env.example` exactly):
 
 ```env
 # --- Nebius Token Factory (NVIDIA Nemotron) ---
 NEBIUS_API_KEY=your_nebius_api_key
 NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1
-NEBIUS_MODEL=nvidia/nemotron-3-ultra-550b-a55b
+NEBIUS_MODEL=nvidia/Nemotron-3-Ultra-550b-a55b
 DEBUG=False
 
 # --- Supabase (Auth verification + PostgREST run persistence) ---
-# Project Settings → API: Project URL, JWT secret, service_role key
+# Supabase Dashboard → Project Settings → API: Project URL, JWT secret, service_role key.
+# Until these are set, protected /api/v1/* routes fail closed with 503 —
+# auth is never silently bypassed.
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_JWT_SECRET=your_jwt_secret
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# --- CORS ---
-FRONTEND_ORIGINS=http://localhost:5173,http://localhost:3000
+# --- CORS (comma-separated frontend origins) ---
+FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 ### Frontend (`frontend/.env.local`)
 
-Copy from `frontend/.env.local.example`:
+Create it from the example (from inside `frontend/`):
+
+```bash
+cp .env.local.example .env.local   # Windows: copy .env.local.example .env.local
+```
 
 ```env
-# Backend API Base (default: http://localhost:8000/api/v1)
+# Backend API base (no trailing slash required; /api suffix included)
 VITE_API_BASE=http://localhost:8000/api/v1
 
-# Supabase Auth & Storage (Project Settings → API → Project URL + anon public key)
+# Supabase project config (Dashboard → Project Settings → API → Project URL + anon public key)
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_public_key
 ```
 
-> **Security Note**: Never commit `.env` or `*.local` files. API keys and service role keys must always remain server-side.
+> **Security note:** `backend/.env` (root `.gitignore`) and
+> `frontend/.env.local` (`frontend/.gitignore` → `*.local`) are gitignored.
+> Never commit them. `NEBIUS_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY`
+> are server-only — never put them in `VITE_*` variables.
+
+### Supabase database
+
+Apply the schema once per project (Supabase Dashboard → SQL Editor → paste & run):
+
+```text
+supabase/migrations/0001_init.sql   # runs, events, usage tables + RLS
+```
 
 ---
 
@@ -958,17 +1015,23 @@ VITE_SUPABASE_ANON_KEY=your_anon_public_key
 
 ## Start Backend
 
-From `backend/`:
+From the **repository root** with the venv active (required — `main.py`
+uses `from .. import ...` relative imports, so the module path must be
+`backend.app.main`):
 
-```bash
-uvicorn app.main:app --reload --port 8000
+```powershell
+.\backend\venv\Scripts\Activate.ps1
+python -m uvicorn backend.app.main:app --reload --port 8000
 ```
 
-Or from project root:
-
 ```bash
-uvicorn backend.app.main:app --reload --port 8000
+source backend/venv/Scripts/activate   # Windows Git Bash
+# source backend/venv/bin/activate     # macOS / Linux
+python -m uvicorn backend.app.main:app --reload --port 8000
 ```
+
+> ❌ Do **not** run `uvicorn app.main:app` from inside `backend/` — it fails
+> with `ImportError: attempted relative import beyond top-level package`.
 
 - API Base: `http://localhost:8000`
 - Health check: `http://localhost:8000/health`
@@ -992,11 +1055,17 @@ npm run dev
 
 ### Backend Test Suite
 
-Run all tests via pytest:
+`pytest.ini` sets `testpaths = backend/tests`, so run pytest from the
+**repository root** with the venv Python (plain `pytest` / `cd backend`
+will not resolve the suite correctly):
+
+```powershell
+.\backend\venv\Scripts\Activate.ps1
+python -m pytest -v
+```
 
 ```bash
-cd backend
-pytest -v
+python -m pytest -v
 ```
 
 **84 / 84 tests passing:**
@@ -1126,14 +1195,14 @@ Click **Fork** on GitHub.
 ### 2. Clone your fork
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/codeforge-ai.git
-cd codeforge-ai
+git clone https://github.com/himaaanshuu/CODEFORGE.git
+cd CODEFORGE
 ```
 
 ### 3. Add upstream
 
 ```bash
-git remote add upstream https://github.com/ORIGINAL_OWNER/codeforge-ai.git
+git remote add upstream https://github.com/himaaanshuu/CODEFORGE.git
 ```
 
 Check:
@@ -1662,7 +1731,7 @@ Fork the repository from GitHub.
 ### 2. Clone
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/codeforge-ai.git
+git clone https://github.com/himaaanshuu/CODEFORGE.git
 ```
 
 ### 3. Create a branch
