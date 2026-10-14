@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ..repository.workspace import Workspace
 from .base import ToolResult
@@ -23,120 +25,255 @@ def _validate_path(path: str, workspace: Workspace) -> bool:
     return True
 
 
-def _extract_patch_info(patch_text: str) -> Optional[Tuple[str, str]]:
-    """Extract file path and new content from a patch string.
+def _validate_new_path(path: str, workspace: Workspace) -> bool:
+    """Validate a path for a file that does not exist yet (same rules as
+    _validate_path, minus the existence check)."""
+    normalized = os.path.normpath(path)
+    if os.path.isabs(normalized):
+        return False
+    root = Path(workspace.root).resolve()
+    resolved = (root / normalized).resolve()
+    if not str(resolved).startswith(str(root) + os.sep):
+        return False
+    if resolved.name == ".git" or ".git" in resolved.relative_to(root).parts:
+        return False
+    return True
 
-    Looks for ---/+++ headers to identify the file,
-    then collects content lines from within hunks (after @@ markers).
-    
-    Returns (target_path, new_content) or None if cannot parse.
+
+@dataclass
+class _Hunk:
+    """One @@ -a,b +c,d @@ hunk from a unified diff."""
+
+    old_start: int  # 1-based line number in old file
+    old_count: int
+    new_start: int  # 1-based line number in new file
+    new_count: int
+    lines: List[str] = field(default_factory=list)  # each line keeps its ' ', '-', '+' prefix
+
+
+@dataclass
+class _FilePatch:
+    """One --- a/... +++ b/... section of a unified diff."""
+
+    old_path: str
+    new_path: str
+    hunks: List[_Hunk] = field(default_factory=list)
+    is_new: bool = False
+    is_delete: bool = False
+
+
+def _parse_hunk_header(line: str) -> Optional[Tuple[int, int, int, int]]:
+    """Parse '@@ -a,b +c,d @@' (counts optional, defaulting to 1)."""
+    m = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+    if not m:
+        return None
+    old_start = int(m.group(1))
+    old_count = int(m.group(2)) if m.group(2) is not None else 1
+    new_start = int(m.group(3))
+    new_count = int(m.group(4)) if m.group(4) is not None else 1
+    return old_start, old_count, new_start, new_count
+
+
+def _parse_unified_diff(patch_text: str) -> Tuple[List[_FilePatch], Optional[str]]:
+    """Parse a unified diff into per-file patches.
+
+    Returns (patches, error). Patches is empty when nothing could be parsed;
+    error is None on success, otherwise a human-readable parse failure.
     """
     if not patch_text or not patch_text.strip():
-        return None
+        return [], "Empty diff text provided."
 
-    lines = patch_text.strip().split("\n")
+    lines = patch_text.replace("\r\n", "\n").split("\n")
+    patches: List[_FilePatch] = []
+    i = 0
+    n = len(lines)
 
-    # Try to find --- and +++ lines to identify the file path
-    target_path = None
+    while i < n:
+        # Locate a '--- old' header line; the next non-empty line must be '+++ new'.
+        if not lines[i].startswith("--- "):
+            i += 1
+            continue
 
-    for i, line in enumerate(lines):
-        # Check for --- a/filepath or --- /filepath (header lines)
-        if line.startswith("--- "):
-            # Don't use this as the target path source after we've found +++
-            match = re.match(r"^--- (?:a/)?(.+)$", line)
-            if match:
-                # Only set target_path if we haven't found it via +++ yet
-                # or if this comes after the +++ line
-                target_path = match.group(1)
-        # Check for +++ b/filepath or +++ /filepath (header lines)
-        elif line.startswith("+++ "):
-            match = re.match(r"^\+\+\+ (?:b/)?(.+)$", line)
-            if match:
-                target_path = match.group(1)
-                # Found the file path from the +++ line, break
+        old_m = re.match(r"^--- (?:a/)?(.+?)(?:\t.*)?$", lines[i])
+        if not old_m:
+            i += 1
+            continue
+
+        # Find the '+++' header (skip blanks a lazy LLM may have inserted).
+        j = i + 1
+        while j < n and lines[j].strip() == "":
+            j += 1
+        if j >= n or not lines[j].startswith("+++ "):
+            i += 1
+            continue
+        new_m = re.match(r"^\+\+\+ (?:b/)?(.+?)(?:\t.*)?$", lines[j])
+        if not new_m:
+            i += 1
+            continue
+
+        old_path = old_m.group(1).strip()
+        new_path = new_m.group(1).strip()
+        file_patch = _FilePatch(
+            old_path=old_path,
+            new_path=new_path,
+            is_new=old_path in ("/dev/null", "dev/null"),
+            is_delete=new_path in ("/dev/null", "dev/null"),
+        )
+
+        i = j + 1
+        # Consume hunks until the next '--- ' file header or end of text.
+        while i < n:
+            line = lines[i]
+            if line.startswith("--- "):
+                break  # next file section
+            header = _parse_hunk_header(line)
+            if header is None:
+                # Skip 'diff --git', 'index', 'Binary files', blank padding, etc.
+                if line.startswith("diff --git") or line.strip() == "" or line.startswith("index "):
+                    i += 1
+                    continue
+                # A stray content-looking line outside any hunk: ignore it.
+                i += 1
+                continue
+
+            old_start, old_count, new_start, new_count = header
+            hunk = _Hunk(old_start=old_start, old_count=old_count, new_start=new_start, new_count=new_count)
+            i += 1
+            # Consume exactly old_count source lines and new_count new lines
+            # (standard patch semantics) so trailing blank lines from the
+            # text ending in "\n" are not mistaken for context.
+            old_seen = 0
+            new_seen = 0
+            while i < n and (old_seen < old_count or new_seen < new_count):
+                hl = lines[i]
+                if hl.startswith("\\"):  # '\ No newline at end of file'
+                    i += 1
+                    continue
+                if hl.startswith("+"):
+                    hunk.lines.append(hl)
+                    new_seen += 1
+                elif hl.startswith("-"):
+                    hunk.lines.append(hl)
+                    old_seen += 1
+                elif hl.startswith(" "):
+                    hunk.lines.append(hl)
+                    old_seen += 1
+                    new_seen += 1
+                elif hl == "":
+                    # Empty line inside a hunk body = context line with empty
+                    # content (LLMs drop the leading space); only count it
+                    # while the header still expects source lines.
+                    if old_seen < old_count and new_seen < new_count:
+                        hunk.lines.append(" ")
+                        old_seen += 1
+                        new_seen += 1
+                    else:
+                        break
+                else:
+                    break
+                i += 1
+            file_patch.hunks.append(hunk)
+
+        if file_patch.hunks:
+            patches.append(file_patch)
+
+    if not patches:
+        return [], (
+            "Could not parse the patch. Provide a unified diff with "
+            "'--- a/path' / '+++ b/path' headers and '@@ -a,b +c,d @@' hunks."
+        )
+    return patches, None
+
+
+def _apply_hunks_to_lines(
+    original: List[str],
+    hunks: List[_Hunk],
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Apply hunks to original file lines, preserving everything outside hunks.
+
+    Each hunk is located by matching its leading context/removal lines against
+    the current file, anchored on the header's expected line number first and
+    then searched outward (the file may already have been shifted by earlier
+    hunks in the same patch). Returns (new_lines, error).
+    """
+    result = list(original)
+    for hunk in hunks:
+        # Build the expected source block (context + removal lines, in order).
+        expected = [l[1:] for l in hunk.lines if l[:1] in (" ", "-")]
+        replacement = [l[1:] for l in hunk.lines if l[:1] in (" ", "+")]
+
+        if hunk.old_count == 0 and not expected:
+            # Pure insertion anchored at old_start (insert after old_start lines).
+            pos = min(hunk.old_start, len(result))
+            result = result[:pos] + replacement + result[pos:]
+            continue
+
+        if not expected:
+            return None, f"Hunk at line {hunk.old_start} has no source context to match against."
+
+        # 1) Try the exact line the header claims.
+        start = hunk.old_start - 1  # to 0-based
+        candidates = [start]
+        # 2) Then a small window around it (tolerate earlier edits / off-by-a-few).
+        for delta in range(1, 6):
+            candidates.extend([start - delta, start + delta])
+        # 3) Finally a full-file scan (LLMs often get the line number badly
+        #    wrong; workspace files are small enough for a linear search).
+        candidates.extend(range(len(result)))
+
+        applied = False
+        for pos in candidates:
+            if pos < 0 or pos + len(expected) > len(result):
+                continue
+            if result[pos : pos + len(expected)] == expected:
+                result = result[:pos] + replacement + result[pos + len(expected) :]
+                applied = True
                 break
 
-    if not target_path:
-        return None
-
-    # Now collect content from within hunks
-    # Hunks start with @@ lines. Within hunks:
-    #   ' ' prefix = context line (same in both old and new)
-    #   '-' prefix = removed line (old version)
-    #   '+' prefix = added line (new version)
-    
-    # Collect all lines that are added lines (start with + but not +++)
-    # and context lines (start with space)
-    # We want the "new content" which includes added lines and context
-    
-    content_lines: List[str] = []
-    in_hunk = False
-    
-    for line in lines:
-        # Check if this line starts a hunk
-        if re.match(r"^@@", line):
-            in_hunk = True
-            continue
-        
-        # If we're outside a hunk, skip --- and +++ header lines
-        # but don't collect them as content
-        if not in_hunk:
-            if line.startswith("--- ") or line.startswith("+++ "):
-                continue
-            # If we hit a non-header line outside a hunk, stop
-            # (this handles cases where the diff doesn't use hunks)
-            if not line.startswith(('+', '-', ' ')):
-                # Could be the start of something else, but stop collecting
-                # unless we already have content
-                if not content_lines:
-                    return None  # Could not find hunk syntax
-                # We have content, stop here
+        # Whitespace-tolerant pass: LLM patches often drop the file's leading
+        # indentation on context lines. Match on stripped content, but keep the
+        # ORIGINAL file's context lines (preserving indentation) and only apply
+        # the patch's removals/additions.
+        if not applied:
+            expected_stripped = [e.strip() for e in expected]
+            for pos in candidates:
+                if pos < 0 or pos + len(expected) > len(result):
+                    continue
+                window = result[pos : pos + len(expected)]
+                if [w.strip() for w in window] != expected_stripped:
+                    continue
+                rebuilt: List[str] = []
+                orig_idx = 0
+                for l in hunk.lines:
+                    prefix = l[:1]
+                    if prefix == " ":
+                        rebuilt.append(window[orig_idx])
+                        orig_idx += 1
+                    elif prefix == "+":
+                        rebuilt.append(l[1:])
+                    elif prefix == "-":
+                        orig_idx += 1
+                result = result[:pos] + rebuilt + result[pos + len(expected) :]
+                applied = True
                 break
-            # Lines starting with +, -, or  outside hunk could be
-            # single-line diff format without hunk markers
-            if line.startswith('+++') or line.startswith('---'):
-                continue
-            # For lines starting with + or - outside hunk, collect them
-            if line.startswith('+'):
-                content_lines.append(line[1:])
-            elif line.startswith('-'):
-                # Skip removed lines - we want new content
-                pass
-            continue
-        
-        # We're inside a hunk
-        # Lines starting with '+' are added lines
-        if line.startswith('+'):
-            # Skip the '+++' header that might appear inside hunk (unlikely but safe)
-            if line.startswith('+++'):
-                continue
-            content_lines.append(line[1:])
-        # Lines starting with ' ' are context lines - include them
-        elif line.startswith(' '):
-            content_lines.append(line[1:])
-        # Lines starting with '-' are removed lines - skip them
-        # (we want the new content, so we don't include removed lines)
-        elif line.startswith('-'):
-            pass
-        # Any other line type inside hunk, stop collecting
-        else:
-            break
-    
-    new_content = "\n".join(content_lines) if content_lines else ""
-    
-    return target_path, new_content
+
+        if not applied:
+            snippet = expected[0][:60] if expected else ""
+            return None, (
+                f"Hunk context not found near line {hunk.old_start} "
+                f"(first expected line: {snippet!r}). The file may have changed; "
+                "re-read it and regenerate the patch."
+            )
+
+    return result, None
 
 
 def apply_patch(diff_text: str, workspace: Workspace) -> ToolResult:
     """Apply a unified diff patch to files inside the workspace.
 
-    This is a controlled patch application that:
-    1. Parses the unified diff to identify affected files and new content
-    2. Validates every affected path is inside the workspace
-    3. Rejects absolute paths, ../ traversal, paths outside workspace
-    4. Rejects forbidden files/directories (.git, system paths)
-    5. Applies only valid changes
-    6. Returns structured result
+    Real unified-diff application: each @@ hunk is matched against the current
+    file content and only its own region is rewritten — the rest of the file is
+    preserved. Supports multi-file patches, new files (/dev/null), and deletions.
 
     Input: {"patch": "unified diff text"}
     """
@@ -147,112 +284,111 @@ def apply_patch(diff_text: str, workspace: Workspace) -> ToolResult:
             error="Empty diff text provided.",
         )
 
-    # Extract patch info
-    result = _extract_patch_info(diff_text)
-    if result is None:
-        return ToolResult(
-            name="apply_patch",
-            success=False,
-            error="Could not parse the patch. Ensure it is a valid unified diff format with ---/+++ headers and content lines.",
-        )
+    patches, parse_error = _parse_unified_diff(diff_text)
+    if parse_error:
+        return ToolResult(name="apply_patch", success=False, error=parse_error)
 
-    target_path, new_content = result
+    # Validate all paths up-front; nothing is written if any path is unsafe.
+    for fp in patches:
+        target = fp.new_path if not fp.is_delete else fp.old_path
+        if target in ("/dev/null", "dev/null"):
+            continue
+        ok = _validate_new_path(target, workspace) if fp.is_new else _validate_path(target, workspace)
+        if not ok:
+            return ToolResult(
+                name="apply_patch",
+                success=False,
+                error=f"Path '{target}' is outside workspace or not allowed.",
+            )
 
-    if not target_path:
-        return ToolResult(
-            name="apply_patch",
-            success=False,
-            error="Could not determine file path from patch.",
-        )
+    files_changed: List[str] = []
+    messages: List[str] = []
 
-    # Validate the path is inside the workspace and safe
-    if not _validate_path(target_path, workspace):
-        return ToolResult(
-            name="apply_patch",
-            success=False,
-            error=f"Path '{target_path}' is outside workspace or not allowed.",
-        )
+    for fp in patches:
+        target = fp.old_path if fp.is_delete else fp.new_path
+        if target in ("/dev/null", "dev/null"):
+            target = fp.old_path if fp.old_path not in ("/dev/null", "dev/null") else fp.new_path
 
-    # If new_content is empty but we have a path, try to read the existing file
-    # and return info about it (read operation)
-    if not new_content.strip():
-        existing = workspace.read_file(target_path)
+        if fp.is_new:
+            # New file: assemble content purely from the hunks. Path safety
+            # was already validated above; resolve() cannot be used because
+            # the file does not exist yet.
+            new_lines: List[str] = []
+            for hunk in fp.hunks:
+                new_lines.extend(l[1:] for l in hunk.lines if l[:1] in (" ", "+"))
+            content = "\n".join(new_lines).rstrip("\n") + "\n" if new_lines else ""
+            resolved = (Path(workspace.root) / os.path.normpath(target)).resolve()
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
+            files_changed.append(target)
+            messages.append(f"Created new file '{target}' ({len(new_lines)} lines).")
+            continue
+
+        resolved = workspace.resolve(target)
+        if resolved is None:
+            return ToolResult(
+                name="apply_patch",
+                success=False,
+                error=f"Cannot apply patch to '{target}': path resolved outside workspace.",
+            )
+
+        existing = workspace.read_file(target)
         if existing is None:
             return ToolResult(
                 name="apply_patch",
                 success=False,
-                error=f"File '{target_path}' not found and could not be read.",
+                error=f"File '{target}' not found; use write_file (or a --- /dev/null header) to create it.",
             )
-        # Return the current content - this is a read/info operation
-        return ToolResult(
-            name="apply_patch",
-            success=True,
-            data={
-                "files_changed": [target_path],
-                "message": f"File '{target_path}' exists. Current content read.",
-                "current_content": existing,
-            },
-            error=None,
-        )
 
-    # Read the current file contents for reference
-    current_content = workspace.read_file(target_path)
+        original_lines = existing.split("\n")
+        # Preserve the common no-trailing-newline convention: a file that did
+        # not end with a blank line after split keeps its final line intact.
+        if original_lines and original_lines[-1] == "":
+            original_lines = original_lines[:-1]
 
-    # Prepare the new content
-    new_content_stripped = new_content.rstrip("\n") + "\n" if new_content else "\n"
-
-    # Write the file
-    try:
-        resolved_target = workspace.resolve(target_path)
-        if resolved_target is None:
+        updated, err = _apply_hunks_to_lines(original_lines, fp.hunks)
+        if err is not None:
             return ToolResult(
                 name="apply_patch",
                 success=False,
-                error=f"Cannot apply patch to '{target_path}': path resolved outside workspace.",
+                error=f"Failed to apply patch to '{target}': {err}",
             )
 
-        resolved_target.parent.mkdir(parents=True, exist_ok=True)
-        resolved_target.write_text(new_content_stripped, encoding="utf-8")
+        assert updated is not None
+        content = "\n".join(updated) + "\n" if updated else ""
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(content, encoding="utf-8")
+        files_changed.append(target)
+        messages.append(f"Applied {len(fp.hunks)} hunk(s) to '{target}'.")
 
-        return ToolResult(
-            name="apply_patch",
-            success=True,
-            data={
-                "files_changed": [target_path],
-                "message": f"Patch applied successfully to '{target_path}'.",
-            },
-            error=None,
-        )
-
-    except (OSError, PermissionError, IOError) as e:
+    if not files_changed:
         return ToolResult(
             name="apply_patch",
             success=False,
-            error=f"Failed to write file '{target_path}': {str(e)[:200]}",
+            error="Patch contained no applicable file changes.",
         )
+
+    return ToolResult(
+        name="apply_patch",
+        success=True,
+        data={
+            "files_changed": files_changed,
+            "message": " ".join(messages),
+        },
+        error=None,
+    )
 
 
 def inspect_diff(workspace: Workspace) -> ToolResult:
-    """Inspect the current changes/diff in the workspace.
+    """Inspect real pending changes in the workspace.
 
-    Returns the current workspace changes created by CodeForge.
-    This can be used to inspect the diff after apply_patch operations.
-
-    Returns:
-        {
-            "success": true,
-            "files_changed": [...],
-            "insertions": N,
-            "deletions": N,
-            "diff": "..."
-        }
+    Uses `git diff` / `git status` when the workspace is a git repository
+    (cloned repos and the local project both are). For non-git directories the
+    tool reports that honestly rather than inventing a diff.
     """
-    # List all files in the workspace
-    # workspace.list_directory() returns a list of filenames
-    entries = workspace.list_directory(".")
-
-    # entries is a list
-    if not entries:
+    root = Path(workspace.root)
+    git_dir = root / ".git"
+    if not git_dir.exists():
         return ToolResult(
             name="inspect_diff",
             success=True,
@@ -260,40 +396,64 @@ def inspect_diff(workspace: Workspace) -> ToolResult:
                 "files_changed": [],
                 "insertions": 0,
                 "deletions": 0,
-                "diff": "No files in workspace.",
+                "diff": (
+                    "Workspace is not a git repository, so no diff is available. "
+                    "Use read_file / write_file / apply_patch results to reason about changes."
+                ),
             },
             error=None,
         )
 
-    # For each file, read it and build a diff marker
+    def _git(*args: str) -> str:
+        proc = subprocess.run(
+            ["git", "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return proc.stdout if proc.returncode == 0 else ""
+
+    # Untracked files count as changes too (but skip ignored/untracked noise).
+    status = _git("status", "--short", "--untracked-files=normal")
+    diff_text = _git("diff", "--no-color")
+    numstat = _git("diff", "--numstat", "--no-color")
+
     files_changed: List[str] = []
-    total_insertions = 0
-    total_deletions = 0
-    diff_parts: List[str] = []
+    for line in status.splitlines():
+        if len(line) >= 4:
+            path = line[3:].strip().strip('"')
+            if " -> " in path:  # renames
+                path = path.split(" -> ", 1)[1]
+            if path and path not in files_changed:
+                files_changed.append(path)
 
-    for entry in entries:
-        file_path = entry
-        # Read the file
-        read_result = workspace.read_file(file_path)
-        if read_result is None:
-            continue
+    insertions = 0
+    deletions = 0
+    for line in numstat.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3:
+            try:
+                insertions += int(parts[0])
+                deletions += int(parts[1])
+            except ValueError:
+                pass  # binary files report '-'
 
-        files_changed.append(file_path)
+    # Cap the diff text the model has to read (huge diffs waste context).
+    max_chars = 12_000
+    if len(diff_text) > max_chars:
+        diff_text = diff_text[:max_chars] + f"\n... [diff truncated at {max_chars} characters]"
 
-        # Simple diff marker
-        content_len = len(read_result) if read_result else 0
-        diff_parts.append(f"File: {file_path}\nContent length: {content_len} bytes")
-
-    diff_summary = "\n\n".join(diff_parts) if diff_parts else "No files inspected."
+    if not files_changed and not diff_text:
+        diff_text = "No pending changes — the working tree is clean."
 
     return ToolResult(
         name="inspect_diff",
         success=True,
         data={
             "files_changed": files_changed,
-            "insertions": total_insertions,
-            "deletions": total_deletions,
-            "diff": diff_summary,
+            "insertions": insertions,
+            "deletions": deletions,
+            "diff": diff_text or "No textual diff (changes may be untracked/binary).",
         },
         error=None,
     )

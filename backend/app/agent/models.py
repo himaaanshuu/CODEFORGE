@@ -277,10 +277,16 @@ Available tools:
    - Input: {{"test_command": "pytest"}}  (optional — defaults to pytest)
    - Output: {{"success": bool, "test_summary": {{"passed": N, "failed": N, ...}}, ...}}
 
-Response format (REQUIRED — respond with exactly ONE JSON object, no prose):
-- Call a tool:   {{"tool": "<tool_name>", "arguments": {{...}}}}
+Response format (REQUIRED — JSON only, no prose):
+- Call one tool:   {{"tool": "<tool_name>", "arguments": {{...}}}}
+- Call several tools at once (preferred when independent): one JSON object per line, e.g.
+  {{"tool": "list_files", "arguments": {{"path": "backend"}}}}
+  {{"tool": "list_files", "arguments": {{"path": "frontend"}}}}
+  All of them are executed in order within the same step.
 - Finish task:   {{"final": {{"summary": "one-paragraph result", "plan": ["step 1", "step 2"]}}}}
 Never answer with plain prose while the task is unfinished.
+Finalize as soon as you have enough information — do not re-issue a tool call
+you already made; its result is in the observations above.
 
 Rules:
 - Never assume file contents - always use the tools
