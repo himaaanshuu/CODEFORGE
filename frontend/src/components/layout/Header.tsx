@@ -47,10 +47,13 @@ export function Header({
         <Menu size={18} aria-hidden />
       </button>
 
-      <div className="font-display leading-none">
-        <span className="text-[0.875rem] font-bold tracking-[0.15em]">CODEFORGE</span>{' '}
-        <span className="text-[0.875rem] font-medium tracking-[0.15em] text-accent">AI</span>
-      </div>
+      <span className="inline-flex items-center gap-2 font-display whitespace-nowrap leading-none text-[0.875rem]">
+        <img src="/logo.png" alt="" aria-hidden className="h-[1.7em] w-auto" draggable={false} />
+        <span>
+          <span className="font-bold tracking-[0.15em]">CODEFORGE</span>{' '}
+          <span className="font-medium tracking-[0.15em] text-accent">AI</span>
+        </span>
+      </span>
 
       <div className="ml-auto flex items-center gap-3 sm:gap-4">
         <span className="hidden sm:inline-flex">

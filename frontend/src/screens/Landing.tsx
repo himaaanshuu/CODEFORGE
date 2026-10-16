@@ -1,7 +1,6 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { BookOpen, FlaskConical, Hammer, ListChecks, Search, ShieldCheck, Wrench, type LucideIcon } from 'lucide-react'
 import { Button } from '../components/ui/Button'
-import { Logo } from '../components/ui/Logo'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import type { Theme } from '../hooks/useTheme'
 
@@ -38,7 +37,13 @@ export function Landing({ theme, onToggleTheme, onStart }: Props) {
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-5">
-        <Logo className="text-[0.9375rem]" />
+        <span className="inline-flex items-center gap-2 font-display whitespace-nowrap leading-none text-[0.9375rem]">
+          <img src="/logo.png" alt="" aria-hidden className="h-[1.7em] w-auto" draggable={false} />
+          <span>
+            <span className="font-bold tracking-[0.2em]">CODEFORGE</span>{' '}
+            <span className="font-medium tracking-[0.2em] text-accent">AI</span>
+          </span>
+        </span>
         <nav aria-label="Primary" className="hidden items-center gap-7 text-sm text-subtle md:flex">
           <a href="#features" className="transition-colors duration-fast hover:text-fg">Features</a>
           <a href="#how" className="transition-colors duration-fast hover:text-fg">How it works</a>

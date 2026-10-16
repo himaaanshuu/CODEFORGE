@@ -1,5 +1,9 @@
 # ⚒️ CodeForge AI
 
+<p align="center">
+  <img src="frontend/public/logo.png" alt="CodeForge AI logo" width="300" />
+</p>
+
 ### Autonomous Software Engineering Agent
 
 > **CodeForge doesn't just write code. It proves its work.**

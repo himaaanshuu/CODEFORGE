@@ -1,6 +1,5 @@
 import { Check } from 'lucide-react'
 import { Button } from '../components/ui/Button'
-import { Logo } from '../components/ui/Logo'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { GithubMark } from '../components/ui/GithubMark'
 import type { Theme } from '../hooks/useTheme'
@@ -13,7 +12,13 @@ export function GithubConnect({ theme, onToggleTheme, onConnect }: Props) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between px-6 py-5">
-        <Logo className="text-[0.9375rem]" />
+        <span className="inline-flex items-center gap-2 font-display whitespace-nowrap leading-none text-[0.9375rem]">
+          <img src="/logo.png" alt="" aria-hidden className="h-[1.7em] w-auto" draggable={false} />
+          <span>
+            <span className="font-bold tracking-[0.2em]">CODEFORGE</span>{' '}
+            <span className="font-medium tracking-[0.2em] text-accent">AI</span>
+          </span>
+        </span>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </header>
       <main className="flex flex-1 items-center justify-center px-6 pb-16">
