@@ -1,6 +1,14 @@
 import { useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
-import { Logo } from '../components/ui/Logo'
+import type { ReactNode } from 'react'
+import {
+  ArrowLeft,
+  Check,
+  Code2,
+  GitBranch,
+  GitPullRequest,
+  ShieldCheck,
+  Terminal,
+} from 'lucide-react'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { Alert } from '../components/ui/Alert'
 import { Button } from '../components/ui/Button'
