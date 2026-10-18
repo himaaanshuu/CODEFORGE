@@ -11,12 +11,20 @@ interface Props<T extends string> {
 export function Tabs<T extends string>({ tabs, value, onChange, label }: Props<T>) {
   const uid = useId()
   return (
-    <div role="tablist" aria-label={label} className="flex gap-6 border-b">
+    <div
+      role="tablist"
+      aria-label={label}
+      className="flex flex-wrap gap-1 rounded-sm border bg-raised p-1"
+    >
       {tabs.map(t => {
         const on = t.id === value
         return (
           <button
-            key={t.id} role="tab" type="button" aria-selected={on} id={`${uid}-${t.id}`}
+            key={t.id}
+            role="tab"
+            type="button"
+            aria-selected={on}
+            id={`${uid}-${t.id}`}
             onClick={() => onChange(t.id)}
             onKeyDown={e => {
               const i = tabs.findIndex(x => x.id === value)
@@ -24,10 +32,18 @@ export function Tabs<T extends string>({ tabs, value, onChange, label }: Props<T
               if (e.key === 'ArrowLeft') onChange(tabs[(i - 1 + tabs.length) % tabs.length].id)
             }}
             tabIndex={on ? 0 : -1}
-            className={`relative -mb-px py-2.5 font-display text-xs font-semibold tracking-[0.06em] transition-colors duration-fast ${on ? 'text-fg' : 'text-subtle hover:text-fg'}`}
+            className={`relative rounded-[8px] px-3.5 py-1.5 font-display text-xs font-semibold tracking-[0.06em] transition-colors duration-fast ${
+              on ? 'text-fg' : 'text-subtle hover:text-fg'
+            }`}
           >
-            {t.label}
-            {on && <motion.span layoutId={`${uid}-tab`} className="absolute inset-x-0 bottom-0 h-0.5 bg-accent" transition={{ duration: 0.2 }} />}
+            {on && (
+              <motion.span
+                layoutId={`${uid}-tab`}
+                className="absolute inset-0 rounded-[8px] bg-surface shadow-raised"
+                transition={{ duration: 0.2 }}
+              />
+            )}
+            <span className="relative z-10">{t.label}</span>
           </button>
         )
       })}

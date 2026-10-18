@@ -12,7 +12,7 @@ export function AgentActivity({ events, running, compact }: Props) {
       {events.length === 0 ? (
         <p className="mt-4 text-sm text-subtle">No activity yet. Run a task to see what the agent does.</p>
       ) : (
-        <ol className="mt-4 border-t border-[color:var(--border)]">
+        <ol className="panel mt-4 overflow-hidden p-0">
           <AnimatePresence initial={false}>
             {events.map((e, i) => {
               const last = i === events.length - 1
@@ -25,7 +25,7 @@ export function AgentActivity({ events, running, compact }: Props) {
                   initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex items-baseline gap-4 border-b border-[color:var(--border)] py-2.5"
+                  className="flex items-baseline gap-4 border-b border-[color:var(--line)] px-4 py-3 last:border-b-0"
                 >
                   <time className="w-16 shrink-0 font-mono text-xs tabular-nums text-muted">{e.time}</time>
                   <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full ${dot} ${active ? 'animate-pulse-dot' : ''}`} />

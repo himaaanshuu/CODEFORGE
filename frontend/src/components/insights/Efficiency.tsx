@@ -29,16 +29,16 @@ export function Efficiency({ run }: Props) {
   ]
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      <p className="eyebrow">Insights</p>
-      <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">Efficiency</h2>
+    <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+      <p className="chip">Insights</p>
+      <h2 className="mt-3 font-display text-2xl font-bold tracking-tight">Efficiency</h2>
       <p className="mt-2 max-w-md text-sm text-subtle">
         Real numbers from your last run — no sample scoring.
       </p>
 
-      <dl className="mt-8 border-t">
+      <dl className="panel mt-8 overflow-hidden p-0">
         {rows.map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between border-b py-3 text-sm">
+          <div key={label} className="flex items-baseline justify-between border-b border-[color:var(--line)] px-5 py-3 text-sm last:border-b-0">
             <dt className="text-subtle">{label}</dt>
             <dd className="font-mono tabular-nums">{value}</dd>
           </div>

@@ -46,7 +46,7 @@ export function TokenLineChart({ data }: { data: Pt[] }) {
       </svg>
       {hover != null && h && (
         <div
-          className="pointer-events-none absolute top-2 border bg-surface px-3 py-2 text-xs shadow-lift"
+          className="panel pointer-events-none absolute top-2 px-3 py-2 text-xs"
           style={{ left: `${(x(hover) / W) * 100}%`, transform: `translateX(${hover > data.length * 0.65 ? '-110%' : '10%'})` }}
         >
           <p className="font-mono text-subtle">Oct {h.day}</p>

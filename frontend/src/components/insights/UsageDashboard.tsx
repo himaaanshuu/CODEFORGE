@@ -27,11 +27,11 @@ export function UsageDashboard({ run }: Props) {
   ]
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="eyebrow">Insights</p>
-          <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">Usage dashboard</h2>
+          <p className="chip">Insights</p>
+          <h2 className="mt-3 font-display text-2xl font-bold tracking-tight">Usage dashboard</h2>
         </div>
         <p className="font-mono text-xs text-subtle">
           Last run · {run.status}
@@ -39,9 +39,9 @@ export function UsageDashboard({ run }: Props) {
         </p>
       </div>
 
-      <dl className="mt-6 grid grid-cols-2 gap-px border bg-[color:var(--line)] sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
-          <div key={t.label} className="bg-surface px-4 py-4">
+          <div key={t.label} className="panel px-4 py-4">
             <dd className="font-display text-2xl font-bold tabular-nums">{t.value}</dd>
             <dt className="mt-1 text-xs text-subtle">{t.label}</dt>
           </div>
@@ -59,7 +59,7 @@ export function UsageDashboard({ run }: Props) {
         ) : (
           <ul className="mt-3 flex flex-wrap gap-2">
             {m.toolsUsed.map((tool) => (
-              <li key={tool} className="border bg-surface px-3 py-1.5 font-mono text-xs">{tool}</li>
+              <li key={tool} className="rounded-full border bg-surface px-3 py-1.5 font-mono text-xs">{tool}</li>
             ))}
           </ul>
         )}
@@ -70,9 +70,9 @@ export function UsageDashboard({ run }: Props) {
         {run.filesInspected.length === 0 ? (
           <p className="mt-3 text-sm text-subtle">No files were inspected during this run.</p>
         ) : (
-          <ul className="mt-3 border-t">
+          <ul className="panel mt-3 overflow-hidden p-0">
             {run.filesInspected.map((f) => (
-              <li key={f} className="border-b py-2 font-mono text-xs">{f}</li>
+              <li key={f} className="border-b border-[color:var(--line)] px-4 py-2 font-mono text-xs last:border-b-0">{f}</li>
             ))}
           </ul>
         )}

@@ -16,6 +16,7 @@ import { RepoList } from '../components/repository/RepoList'
 import { ChangesTab } from '../components/run/ChangesTab'
 import { TestsTab } from '../components/run/TestsTab'
 import { VerificationTab } from '../components/run/VerificationTab'
+import { CodeViewer } from '../components/code/CodeViewer'
 import { Button } from '../components/ui/Button'
 import { Alert } from '../components/ui/Alert'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -39,8 +40,8 @@ const RUN_TABS: { id: RunTab; label: string }[] = [
 function ViewHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div>
-      <p className="eyebrow">Workspace</p>
-      <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">{title}</h2>
+      <p className="chip">Workspace</p>
+      <h2 className="mt-3 font-display text-2xl font-bold tracking-tight">{title}</h2>
       {subtitle && <p className="mt-2 max-w-xl text-sm text-subtle">{subtitle}</p>}
     </div>
   )
@@ -144,14 +145,14 @@ export function Workspace({ view, agent, onNavigate }: Props) {
 
   const activitySection = (
     <>
-      <AgentActivity events={agent.events} running={agent.running} />
+      <AgentActivity events={agent.events} running={agent.running} compact />
       {agent.run && agent.run.plan.length > 0 && (
-        <section aria-label="Plan" className="mt-5 border bg-surface p-4">
+        <section aria-label="Plan" className="panel mt-5 p-5">
           <p className="eyebrow">Plan</p>
-          <ol className="mt-2 space-y-1.5">
+          <ol className="mt-3 space-y-2">
             {agent.run.plan.map((step, i) => (
               <li key={`${i}-${step}`} className="flex gap-3 text-sm">
-                <span className="font-mono text-xs text-subtle">{i + 1}</span>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-raised font-mono text-[11px] text-subtle">{i + 1}</span>
                 <span>{step}</span>
               </li>
             ))}
@@ -160,9 +161,9 @@ export function Workspace({ view, agent, onNavigate }: Props) {
       )}
       {agent.events.length > 0 && (
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={agent.reset}>NEW TASK</Button>
+          <Button variant="ghost" size="sm" onClick={agent.reset}>New task</Button>
           <Button size="sm" onClick={() => onNavigate('changes')} disabled={!agent.run || agent.run.changes.length === 0}>
-            VIEW CHANGES
+            View changes
           </Button>
         </div>
       )}
@@ -170,15 +171,15 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   )
 
   const agentView = (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
       {agentFile && (
-        <p className="mb-4 inline-flex items-center gap-2 border bg-surface px-3 py-1.5 font-mono text-xs text-subtle">
-          Target file: <span className="text-ink">{agentFile}</span>
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border bg-surface px-3 py-1.5 font-mono text-xs text-subtle">
+          Target file: <span className="text-fg">{agentFile}</span>
           <button
             type="button"
             onClick={() => setAgentFile(null)}
             aria-label="Clear target file"
-            className="text-subtle hover:text-ink"
+            className="text-subtle hover:text-fg"
           >
             ×
           </button>
@@ -196,7 +197,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
       />
       <div className="mt-8">
         <Tabs<RunTab> label="Run" value={tab} onChange={setTab} tabs={RUN_TABS} />
-        <div role="tabpanel" className="min-h-40">
+        <div role="tabpanel" className="mt-5 min-h-40">
           {tab === 'activity' && activitySection}
           {tab === 'changes' && <ChangesTab changes={agent.run?.changes ?? []} />}
           {tab === 'tests' && <TestsTab run={agent.run?.tests ?? null} />}
@@ -208,7 +209,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
 
   const repositoriesView = (
     <>
-      <div className="mx-auto max-w-3xl px-6 pt-10">
+      <div className="mx-auto max-w-3xl px-5 pt-8 sm:px-8">
         <ViewHeader
           title="Repository"
           subtitle="Your GitHub repositories. Select one to clone it and browse its files."
@@ -240,8 +241,8 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   )
 
   const filesView = (
-    <div className="grid lg:grid-cols-[17rem_1fr]">
-      <aside className="border-b p-3 lg:border-b-0 lg:border-r">
+    <div className="grid min-h-full lg:grid-cols-[18rem_1fr]">
+      <aside className="border-b bg-surface p-4 lg:border-b-0 lg:border-r">
         {tree ? (
           <FileExplorer
             tree={tree.children ?? []}
@@ -251,17 +252,17 @@ export function Workspace({ view, agent, onNavigate }: Props) {
             title={tree.name}
           />
         ) : treeError ? (
-          <div className="px-2 py-4">
+          <div className="px-1 py-4">
             <Alert variant="error" title="Could not load files">{treeError}</Alert>
             <div className="mt-3">
-              <Button variant="ghost" size="sm" onClick={loadTree}>RETRY</Button>
+              <Button variant="ghost" size="sm" onClick={loadTree}>Retry</Button>
             </div>
           </div>
         ) : (
           <p className="px-2 py-4 text-sm text-subtle">Loading files…</p>
         )}
       </aside>
-      <section className="min-w-0 p-6">
+      <section className="min-w-0 p-5 sm:p-8">
         {selectedFile === null ? (
           <EmptyState title="File viewer" message="Select a file on the left to read its real contents from the workspace." />
         ) : fileLoading ? (
@@ -270,14 +271,14 @@ export function Workspace({ view, agent, onNavigate }: Props) {
           <Alert variant="error" title={`Could not read ${selectedFile}`}>{fileError}</Alert>
         ) : (
           <article className="min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="eyebrow break-all">{selectedFile}</p>
-              <Button size="sm" onClick={useFileForAgent}>USE FOR AGENT</Button>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="chip max-w-full truncate">{selectedFile}</p>
+              <Button size="sm" onClick={useFileForAgent}>Use for agent</Button>
             </div>
-            <pre className="scroll-thin mt-3 overflow-x-auto whitespace-pre-wrap break-words border bg-surface p-4 font-mono text-[0.8125rem] leading-6">
-              {fileContent}
-              {fileTruncated ? '\n\n… (file truncated)' : ''}
-            </pre>
+            <CodeViewer
+              path={selectedFile}
+              source={`${fileContent ?? ''}${fileTruncated ? '\n\n… (file truncated)' : ''}`}
+            />
           </article>
         )}
       </section>
@@ -285,16 +286,20 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   )
 
   const changesView = (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
       <ViewHeader title="Changes" subtitle="Diff of the files modified by your last agent run." />
-      <ChangesTab changes={agent.run?.changes ?? []} />
+      <div className="mt-6">
+        <ChangesTab changes={agent.run?.changes ?? []} />
+      </div>
     </div>
   )
 
   const testsView = (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
       <ViewHeader title="Tests" subtitle="Results of the test suite executed during your last run." />
-      <TestsTab run={agent.run?.tests ?? null} />
+      <div className="mt-6">
+        <TestsTab run={agent.run?.tests ?? null} />
+      </div>
     </div>
   )
 

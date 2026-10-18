@@ -26,15 +26,15 @@ export function Button({
 }: Props) {
   const reduce = useReducedMotion()
   const base =
-    'inline-flex items-center justify-center gap-2 rounded-sm font-display font-semibold tracking-[0.14em] transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-45'
+    'inline-flex items-center justify-center gap-2 rounded-sm font-display font-semibold tracking-[0.1em] transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-45'
   const sizing =
     size === 'sm'
-      ? 'px-3.5 py-1.5 text-[0.6875rem]'
+      ? 'px-3.5 py-2 text-[0.6875rem]'
       : 'px-5 py-2.5 text-xs'
   const styles =
     variant === 'primary'
       ? 'bg-burgundy text-on-accent hover:bg-burgundy-light'
-      : 'border border-strong text-ink hover:bg-cream-deep'
+      : 'border border-strong bg-surface text-fg hover:bg-raised'
   return (
     <motion.button
       type={type}
@@ -44,7 +44,7 @@ export function Button({
       title={title}
       className={`${base} ${sizing} ${styles} ${full ? 'w-full' : ''}`}
       whileHover={reduce || disabled ? undefined : { y: -1 }}
-      whileTap={reduce || disabled ? undefined : { scale: 0.97 }}
+      whileTap={reduce || disabled ? undefined : { scale: 0.98 }}
       transition={{ duration: 0.14 }}
     >
       {children}

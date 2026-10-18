@@ -23,11 +23,11 @@ export function VerificationTab({ run }: { run: AgentRunView | null }) {
 
   return (
     <motion.section
-      aria-label="Run summary" className="max-w-xl py-5"
+      aria-label="Run summary" className="max-w-xl py-1"
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className={`flex items-center gap-4 border-l-2 pl-5 ${run.success ? 'border-ok' : 'border-bad'}`}>
+      <div className={`panel flex items-center gap-4 p-5 ${run.success ? 'border-ok/40' : 'border-bad/40'}`}>
         {run.success
           ? <ShieldCheck size={28} className="text-ok" aria-hidden />
           : <ShieldAlert size={28} className="text-bad" aria-hidden />}
@@ -39,9 +39,9 @@ export function VerificationTab({ run }: { run: AgentRunView | null }) {
         </div>
       </div>
 
-      <dl className="mt-6 border-t">
+      <dl className="panel mt-5 overflow-hidden p-0">
         {rows.map(([k, v, ok]) => (
-          <div key={k} className="flex items-baseline justify-between border-b py-2.5 text-sm">
+          <div key={k} className="flex items-baseline justify-between border-b border-[color:var(--line)] px-4 py-2.5 text-sm last:border-b-0">
             <dt className="text-subtle">{k}</dt>
             <dd className={`font-mono tabular-nums ${ok ? 'text-ok' : ''}`}>{v}</dd>
           </div>
@@ -54,7 +54,7 @@ export function VerificationTab({ run }: { run: AgentRunView | null }) {
           <ol className="mt-3 space-y-1.5 text-sm">
             {run.plan.map((step, i) => (
               <li key={`${i}-${step}`} className="flex gap-3">
-                <span className="font-mono text-xs text-subtle">{i + 1}</span>
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-raised font-mono text-[11px] text-subtle">{i + 1}</span>
                 <span>{step}</span>
               </li>
             ))}

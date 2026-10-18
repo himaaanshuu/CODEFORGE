@@ -3,6 +3,7 @@ import { LogOut, Menu } from 'lucide-react'
 import type { AgentState } from '../../types'
 import { signOutUser, type User } from '../../lib/supabase'
 import { AgentStatus } from '../agent/AgentStatus'
+import { Brand } from '../ui/Brand'
 import { ThemeToggle } from '../ui/ThemeToggle'
 
 interface Props {
@@ -34,39 +35,41 @@ export function Header({
     }
   }
 
+  const handle = user?.user_metadata?.user_name || user?.email || 'Signed in'
+
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-surface px-4 sm:gap-4 sm:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-surface/90 px-4 backdrop-blur-sm sm:gap-4 sm:px-5">
       <button
         type="button"
         onClick={onToggleNav}
         aria-label="Toggle navigation"
         aria-expanded={navOpen}
         aria-controls="primary-nav"
-        className="-ml-1.5 rounded-sm p-1.5 text-subtle transition-colors duration-fast hover:text-fg md:hidden"
+        className="-ml-1 rounded-sm p-1.5 text-subtle transition-colors duration-fast hover:bg-raised hover:text-fg md:hidden"
       >
         <Menu size={18} aria-hidden />
       </button>
 
-      <span className="inline-flex items-center gap-2 font-display whitespace-nowrap leading-none text-[0.875rem]">
-        <img src="/logo.png" alt="" aria-hidden className="h-[1.7em] w-auto" draggable={false} />
-        <span>
-          <span className="font-bold tracking-[0.15em]">CODEFORGE</span>{' '}
-          <span className="font-medium tracking-[0.15em] text-accent">AI</span>
-        </span>
-      </span>
+      <Brand size="sm" />
 
-      <div className="ml-auto flex items-center gap-3 sm:gap-4">
-        <span className="hidden sm:inline-flex">
+      <div className="ml-auto flex items-center gap-2.5 sm:gap-3">
+        <span className="hidden rounded-full border bg-raised px-3 py-1.5 sm:inline-flex">
           <AgentStatus state={state} />
         </span>
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         {user && (
-          <span className="flex items-center gap-2 border-l pl-3">
+          <span className="flex items-center gap-2 rounded-full border bg-raised py-1 pl-2.5 pr-1">
             <span
-              className="hidden max-w-40 truncate font-mono text-xs text-subtle sm:inline"
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-burgundy font-display text-[10px] font-bold text-on-accent"
+              aria-hidden
+            >
+              {String(handle).slice(0, 1).toUpperCase()}
+            </span>
+            <span
+              className="hidden max-w-36 truncate font-mono text-[11px] text-subtle sm:inline"
               title={user.id}
             >
-              {user.user_metadata?.user_name || user.email || 'Signed in'}
+              {handle}
             </span>
             <button
               type="button"
@@ -74,9 +77,9 @@ export function Header({
               disabled={signingOut}
               aria-label="Sign out"
               title="Sign out"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-subtle transition-colors duration-fast hover:bg-raised hover:text-fg disabled:opacity-50"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-subtle transition-colors duration-fast hover:bg-surface hover:text-fg disabled:opacity-50"
             >
-              <LogOut size={15} aria-hidden />
+              <LogOut size={14} aria-hidden />
             </button>
           </span>
         )}

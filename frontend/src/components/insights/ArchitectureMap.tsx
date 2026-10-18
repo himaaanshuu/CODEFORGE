@@ -132,15 +132,15 @@ export function ArchitectureMap({ tree, loading, onOpenFile }: Props) {
   const width = Math.max(...nodes.map((n) => n.x)) + NW + 48
   const height = Math.max(...nodes.map((n) => n.y)) + NH + 36
   const clamp = (z: number) => Math.max(0.6, Math.min(1.6, Math.round(z * 10) / 10))
-  const ctl = 'flex h-8 w-8 items-center justify-center border bg-surface text-subtle transition-colors duration-fast hover:bg-raised hover:text-fg'
+  const ctl = 'flex h-8 w-8 items-center justify-center rounded-sm border bg-surface text-subtle transition-colors duration-fast hover:bg-raised hover:text-fg'
   const hidden = truncated ? `Showing the first ${nodes.length} entries — deeper or extra siblings are omitted.` : ''
 
   return (
-    <div className="flex h-[calc(100vh-5.75rem)] min-h-80 flex-col px-4 py-4 sm:px-6">
+    <div className="flex h-[calc(100vh-6.5rem)] min-h-80 flex-col px-4 py-5 sm:px-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
         <div>
-          <p className="eyebrow">Workspace</p>
-          <h2 className="mt-0.5 font-display text-xl font-bold tracking-tight">Repository architecture</h2>
+          <p className="chip">Workspace</p>
+          <h2 className="mt-2 font-display text-xl font-bold tracking-tight">Repository architecture</h2>
         </div>
         <p className="text-xs text-subtle">
           Built from the real file tree. Select a node to inspect it.
@@ -149,7 +149,7 @@ export function ArchitectureMap({ tree, loading, onOpenFile }: Props) {
       </div>
 
       <div className="mt-3 grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_17rem]">
-        <div className="relative min-h-0 overflow-auto border bg-surface scroll-thin">
+        <div className="panel relative min-h-0 overflow-auto scroll-thin p-0">
           <div className="absolute left-3 top-3 z-10 flex flex-col gap-1">
             <button type="button" className={ctl} aria-label="Zoom in" onClick={() => setZoom(z => clamp(z + 0.2))}><Plus size={14} aria-hidden /></button>
             <button type="button" className={ctl} aria-label="Zoom out" onClick={() => setZoom(z => clamp(z - 0.2))}><Minus size={14} aria-hidden /></button>
@@ -189,7 +189,7 @@ export function ArchitectureMap({ tree, loading, onOpenFile }: Props) {
                 onClick={() => setSelected(n.id)}
                 aria-pressed={node.id === n.id}
                 style={{ left: n.x, top: n.y, width: NW, height: NH }}
-                className={`absolute flex flex-col justify-center border border-l-4 bg-bg px-3 text-left transition-colors duration-fast hover:bg-raised ${kindColor[n.kind]} ${node.id === n.id ? 'border-accent ring-1 ring-accent' : ''}`}
+                className={`absolute flex flex-col justify-center rounded-sm border border-l-4 bg-bg px-3 text-left transition-colors duration-fast hover:bg-raised ${kindColor[n.kind]} ${node.id === n.id ? 'border-accent ring-1 ring-accent' : ''}`}
               >
                 <span className="truncate font-mono text-xs font-semibold">{n.label}</span>
                 <span className="truncate text-[0.625rem] text-subtle">
@@ -200,7 +200,7 @@ export function ArchitectureMap({ tree, loading, onOpenFile }: Props) {
           </div>
         </div>
 
-        <aside aria-label="Node details" className="scroll-thin overflow-auto border bg-surface p-5">
+        <aside aria-label="Node details" className="panel scroll-thin overflow-auto p-5">
           <p className="eyebrow">Node details</p>
           <h3 className="mt-2 break-all font-mono text-sm font-semibold">{node.path}</h3>
           <dl className="mt-4 space-y-3 text-sm">

@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react'
+import { Brand } from '../components/ui/Brand'
 import { Button } from '../components/ui/Button'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { GithubMark } from '../components/ui/GithubMark'
@@ -10,26 +11,22 @@ const perms = ['Read your repositories', 'Create branches and commits', 'Open pu
 
 export function GithubConnect({ theme, onToggleTheme, onConnect }: Props) {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-bg">
       <header className="flex items-center justify-between px-6 py-5">
-        <span className="inline-flex items-center gap-2 font-display whitespace-nowrap leading-none text-[0.9375rem]">
-          <img src="/logo.png" alt="" aria-hidden className="h-[1.7em] w-auto" draggable={false} />
-          <span>
-            <span className="font-bold tracking-[0.2em]">CODEFORGE</span>{' '}
-            <span className="font-medium tracking-[0.2em] text-accent">AI</span>
-          </span>
-        </span>
+        <Brand />
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </header>
       <main className="flex flex-1 items-center justify-center px-6 pb-16">
-        <section aria-labelledby="gh-h" className="w-full max-w-md border bg-surface p-8 shadow-raised">
+        <section aria-labelledby="gh-h" className="panel w-full max-w-md p-8">
           <div className="flex items-center gap-3">
-            <GithubMark size={22} />
-            <h1 id="gh-h" className="font-display text-xl font-bold tracking-tight">Connect your GitHub account</h1>
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-raised">
+              <GithubMark size={20} />
+            </span>
+            <h1 id="gh-h" className="font-display text-xl font-bold tracking-tight">Connect GitHub</h1>
           </div>
           <p className="mt-2 text-sm text-subtle">Authorize CodeForge to access your repositories</p>
 
-          <div className="mt-6 flex items-center gap-3 border bg-bg p-3">
+          <div className="mt-6 flex items-center gap-3 rounded-sm border bg-bg p-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-raised"><GithubMark size={18} /></span>
             <div>
               <p className="text-sm font-semibold">octocat</p>
@@ -42,7 +39,7 @@ export function GithubConnect({ theme, onToggleTheme, onConnect }: Props) {
               <li key={p} className="flex items-center gap-3 text-sm"><Check size={15} className="text-ok" aria-hidden />{p}</li>
             ))}
           </ul>
-          <div className="mt-7"><Button full onClick={onConnect}>CONNECT GITHUB</Button></div>
+          <div className="mt-7"><Button full onClick={onConnect}>Connect GitHub</Button></div>
           <p className="mt-4 text-center text-xs text-subtle">Preview build: no real GitHub authorization happens yet.</p>
         </section>
       </main>

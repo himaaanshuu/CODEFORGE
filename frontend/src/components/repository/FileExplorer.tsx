@@ -34,7 +34,7 @@ function Node({
           aria-expanded={open}
           onClick={() => setOpen(o => !o)}
           style={pad}
-          className="flex w-full items-center gap-1.5 py-1 pr-2 text-left font-mono text-[0.8125rem] transition-colors duration-fast hover:bg-cream-deep"
+          className="flex w-full items-center gap-1.5 rounded-sm py-1 pr-2 text-left font-mono text-[0.8125rem] transition-colors duration-fast hover:bg-raised"
         >
           {open ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />}
           {node.name}
@@ -66,15 +66,15 @@ function Node({
         aria-selected={isSel}
         onClick={() => onSelect(node.path)}
         style={{ paddingLeft: `${depth * 14 + 8 + 17}px` }}
-        className={`flex w-full items-center border-l-2 py-1 pr-2 text-left font-mono text-[0.8125rem] transition-colors duration-fast ${
+        className={`flex w-full items-center rounded-sm py-1 pr-2 text-left font-mono text-[0.8125rem] transition-colors duration-fast ${
           isSel
-            ? 'border-burgundy bg-burgundy/[0.07] text-ink'
-            : 'border-transparent text-ink/80 hover:bg-cream-deep'
+            ? 'bg-accent/12 font-medium text-fg'
+            : 'text-fg/80 hover:bg-raised'
         }`}
       >
         <span className="min-w-0 flex-1 truncate">{node.name}</span>
         {isChanged && (
-          <span title="Modified by the last agent run" className="ml-1.5 shrink-0 text-burgundy">
+          <span title="Modified by the last agent run" className="ml-1.5 shrink-0 text-accent">
             <PencilLine size={11} aria-hidden />
           </span>
         )}
@@ -87,7 +87,7 @@ export function FileExplorer({ tree, selected, onSelect, changed, title }: Props
   const changedSet = new Set(changed ?? [])
   return (
     <nav aria-label="Repository files">
-      <p className="eyebrow mb-2 px-2">{title || 'Project'}</p>
+      <p className="eyebrow mb-3 px-1">{title || 'Project'}</p>
       <ul role="tree" aria-label="Project files">
         {tree.map(n => (
           <Node

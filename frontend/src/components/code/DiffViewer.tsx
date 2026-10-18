@@ -8,13 +8,13 @@ const mark = { add: '+', del: '−', context: ' ' } as const
 export function DiffViewer({ change }: { change: FileChange }) {
   const text = change.lines.filter(l => l.kind !== 'del').map(l => l.text).join('\n')
   return (
-    <div className="border border-[color:var(--border)] bg-cream-deep/40">
+    <div className="panel overflow-hidden p-0">
       <CodeHeader
         path={change.path}
         getText={() => text}
         right={<span className="font-mono text-xs"><span className="text-sage">+{change.added}</span>{' '}<span className="text-rust">−{change.removed}</span></span>}
       />
-      <pre className="scroll-thin overflow-x-auto py-3 font-mono text-[0.8125rem] leading-6" tabIndex={0} aria-label={`Diff of ${change.path}`}>
+      <pre className="scroll-thin overflow-x-auto bg-bg py-3 font-mono text-[0.8125rem] leading-6" tabIndex={0} aria-label={`Diff of ${change.path}`}>
         <code>
           {change.lines.map((l, i) => (
             <div key={i} className={`flex ${bg[l.kind]}`}>
