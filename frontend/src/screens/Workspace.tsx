@@ -52,7 +52,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   const [model, setModel] = useState('Nemotron 3 Ultra')
   const [tab, setTab] = useState<RunTab>('activity')
 
-  const [workspaceId, setWorkspaceId] = useState(DEFAULT_WORKSPACE_ID)
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [cloningRepo, setCloningRepo] = useState<string | null>(null)
   const [agentFile, setAgentFile] = useState<string | null>(null)
 
@@ -84,6 +84,11 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   }, [])
 
   const loadTree = useCallback(() => {
+    if (workspaceId === null) {
+      setTree(null)
+      setTreeError(null)
+      return
+    }
     setTreeError(null)
     setSelectedFile(null)
     setFileContent(null)
@@ -97,6 +102,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   }, [loadTree])
 
   const openFile = useCallback((path: string) => {
+    if (workspaceId === null) return
     setSelectedFile(path)
     setFileContent(null)
     setFileError(null)
@@ -126,7 +132,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   }, [onNavigate])
 
   const useFileForAgent = useCallback(() => {
-    if (!selectedFile) return
+    if (!selectedFile || workspaceId === null) return
     setAgentFile(selectedFile)
     if (!prompt.trim()) {
       setPrompt(`Work on the file ${selectedFile} in the ${workspaceId} workspace.`)
@@ -138,7 +144,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
     const task = prompt.trim()
     if (!task || agent.running) return
     setTab('activity')
-    agent.start(task, workspaceId, modelForLabel(model))
+    agent.start(task, workspaceId ?? DEFAULT_WORKSPACE_ID, modelForLabel(model))
   }
 
   const changedPaths = agent.run?.filesChanged ?? []
@@ -240,50 +246,59 @@ export function Workspace({ view, agent, onNavigate }: Props) {
     </>
   )
 
-  const filesView = (
-    <div className="grid min-h-full lg:grid-cols-[18rem_1fr]">
-      <aside className="border-b bg-surface p-4 lg:border-b-0 lg:border-r">
-        {tree ? (
-          <FileExplorer
-            tree={tree.children ?? []}
-            selected={selectedFile}
-            onSelect={openFile}
-            changed={changedPaths}
-            title={tree.name}
-          />
-        ) : treeError ? (
-          <div className="px-1 py-4">
-            <Alert variant="error" title="Could not load files">{treeError}</Alert>
-            <div className="mt-3">
-              <Button variant="ghost" size="sm" onClick={loadTree}>Retry</Button>
-            </div>
-          </div>
-        ) : (
-          <p className="px-2 py-4 text-sm text-subtle">Loading files…</p>
-        )}
-      </aside>
-      <section className="min-w-0 p-5 sm:p-8">
-        {selectedFile === null ? (
-          <EmptyState title="File viewer" message="Select a file on the left to read its real contents from the workspace." />
-        ) : fileLoading ? (
-          <p className="text-sm text-subtle">Loading {selectedFile}…</p>
-        ) : fileError ? (
-          <Alert variant="error" title={`Could not read ${selectedFile}`}>{fileError}</Alert>
-        ) : (
-          <article className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="chip max-w-full truncate">{selectedFile}</p>
-              <Button size="sm" onClick={useFileForAgent}>Use for agent</Button>
-            </div>
-            <CodeViewer
-              path={selectedFile}
-              source={`${fileContent ?? ''}${fileTruncated ? '\n\n… (file truncated)' : ''}`}
+  const filesView =
+    workspaceId === null ? (
+      <div className="flex min-h-full items-center justify-center">
+        <EmptyState
+          title="No repository selected"
+          message="Pick a repository from the Repository tab to browse its files here."
+          action={<Button onClick={() => onNavigate('repositories')}>Browse repositories</Button>}
+        />
+      </div>
+    ) : (
+      <div className="grid lg:h-full lg:grid-cols-[18rem_1fr] lg:grid-rows-[minmax(0,1fr)]">
+        <aside className="scroll-thin border-b bg-surface p-4 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+          {tree ? (
+            <FileExplorer
+              tree={tree.children ?? []}
+              selected={selectedFile}
+              onSelect={openFile}
+              changed={changedPaths}
+              title={tree.name}
             />
-          </article>
-        )}
-      </section>
-    </div>
-  )
+          ) : treeError ? (
+            <div className="px-1 py-4">
+              <Alert variant="error" title="Could not load files">{treeError}</Alert>
+              <div className="mt-3">
+                <Button variant="ghost" size="sm" onClick={loadTree}>Retry</Button>
+              </div>
+            </div>
+          ) : (
+            <p className="px-2 py-4 text-sm text-subtle">Loading files…</p>
+          )}
+        </aside>
+        <section className="scroll-thin min-w-0 p-5 sm:p-8 lg:min-h-0 lg:overflow-y-auto">
+          {selectedFile === null ? (
+            <EmptyState title="File viewer" message="Select a file on the left to read its real contents from the workspace." />
+          ) : fileLoading ? (
+            <p className="text-sm text-subtle">Loading {selectedFile}…</p>
+          ) : fileError ? (
+            <Alert variant="error" title={`Could not read ${selectedFile}`}>{fileError}</Alert>
+          ) : (
+            <article className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="chip max-w-full truncate">{selectedFile}</p>
+                <Button size="sm" onClick={useFileForAgent}>Use for agent</Button>
+              </div>
+              <CodeViewer
+                path={selectedFile}
+                source={`${fileContent ?? ''}${fileTruncated ? '\n\n… (file truncated)' : ''}`}
+              />
+            </article>
+          )}
+        </section>
+      </div>
+    )
 
   const changesView = (
     <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
@@ -307,6 +322,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
     <AnimatePresence mode="wait">
       <motion.div
         key={view}
+        className={view === 'files' ? 'lg:h-full' : undefined}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -318,7 +334,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
         {view === 'changes' && changesView}
         {view === 'tests' && testsView}
         {view === 'architecture' && (
-          <ArchitectureMap tree={tree} loading={!tree && !treeError} onOpenFile={(path) => {
+          <ArchitectureMap tree={tree} loading={workspaceId !== null && !tree && !treeError} onOpenFile={(path) => {
             onNavigate('files')
             openFile(path)
           }} />
