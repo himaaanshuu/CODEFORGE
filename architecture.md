@@ -151,7 +151,7 @@ Allow-list filter (pytest/npm test/etc. only), sanitized environment, 60s wall t
 ```text
 frontend/src/
 ├── App.tsx                  # routing between Landing / Auth / Workspace views
-├── screens/                 # Landing, Auth (login), GithubConnect, Workspace
+├── screens/                 # Landing, Auth (login), Docs (in-app handbook), GithubConnect, Workspace
 ├── components/
 │   ├── layout/              # Header, Sidebar
 │   ├── agent/               # status pill, PromptComposer, timeline, AgentStatus

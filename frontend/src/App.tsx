@@ -9,8 +9,9 @@ import { Sidebar } from './components/layout/Sidebar'
 import { Workspace } from './screens/Workspace'
 import { Landing } from './screens/Landing'
 import { Auth } from './screens/Auth'
+import { Docs } from './screens/Docs'
 
-type Route = 'landing' | 'auth' | 'workspace'
+type Route = 'landing' | 'auth' | 'docs' | 'workspace'
 
 export default function App() {
   const agent = useAgentRun()
@@ -43,6 +44,18 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggle}
         onStart={() => setRoute('auth')}
+        onDocs={() => setRoute('docs')}
+      />
+    )
+  }
+
+  if (route === 'docs') {
+    return (
+      <Docs
+        theme={theme}
+        onToggleTheme={toggle}
+        onBack={() => setRoute('landing')}
+        onStart={() => setRoute(auth.status === 'signed-in' ? 'workspace' : 'auth')}
       />
     )
   }
@@ -74,6 +87,7 @@ export default function App() {
           state={agent.state}
           navOpen={navOpen}
           onToggleNav={() => setNavOpen(o => !o)}
+          onLogoClick={() => setRoute('landing')}
           theme={theme}
           onToggleTheme={toggle}
           user={auth.user}

@@ -1,11 +1,11 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { BookOpen, FlaskConical, Hammer, ListChecks, Search, ShieldCheck, Wrench, type LucideIcon } from 'lucide-react'
+import { BookOpen, Check, FlaskConical, Hammer, ListChecks, Search, ShieldCheck, Wrench, type LucideIcon } from 'lucide-react'
 import { Brand } from '../components/ui/Brand'
 import { Button } from '../components/ui/Button'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import type { Theme } from '../hooks/useTheme'
 
-interface Props { theme: Theme; onToggleTheme: () => void; onStart: () => void }
+interface Props { theme: Theme; onToggleTheme: () => void; onStart: () => void; onDocs: () => void }
 
 type Tone = 'bad' | 'ok'
 const pipeline: { label: string; note: string; icon: LucideIcon; tone?: Tone }[] = [
@@ -24,9 +24,44 @@ const features = [
   { kicker: '03', title: 'Repairs, then reports', body: 'Failures are analysed and fixed; you see the full trail.' },
 ]
 
+const plans = [
+  {
+    name: 'Free',
+    price: '0',
+    blurb: 'Try the agent on your first repository.',
+    features: ['25 agent runs / month', '1 connected repository', 'Nano model', 'Prompt scoring', '7-day run history', 'Community support'],
+    cta: 'Get started',
+    featured: false,
+  },
+  {
+    name: 'Basic',
+    price: '12',
+    blurb: 'For side projects that need real repairs.',
+    features: ['150 agent runs / month', '5 connected repositories', 'Standard model', 'Diffs & sandboxed tests', '30-day run history', 'Email support'],
+    cta: 'Start Basic',
+    featured: false,
+  },
+  {
+    name: 'Pro',
+    price: '29',
+    blurb: 'For daily shipping with the full loop.',
+    features: ['1,000 agent runs / month', 'Unlimited repositories', 'Super model', 'Priority execution', 'Usage & efficiency analytics', '90-day run history'],
+    cta: 'Start Pro',
+    featured: true,
+  },
+  {
+    name: 'Elite',
+    price: '79',
+    blurb: 'For teams and power users at full throttle.',
+    features: ['Unlimited agent runs', 'Early-access features', '3 team seats', 'Custom model configuration', 'Dedicated support', 'Priority response SLA'],
+    cta: 'Start Elite',
+    featured: false,
+  },
+]
+
 const toneIcon = (t?: Tone) => (t === 'bad' ? 'bg-bad/12 text-bad' : t === 'ok' ? 'bg-ok/12 text-ok' : 'bg-accent/12 text-accent')
 
-export function Landing({ theme, onToggleTheme, onStart }: Props) {
+export function Landing({ theme, onToggleTheme, onStart, onDocs }: Props) {
   const reduce = useReducedMotion()
   const rise = (i: number) =>
     reduce ? {} : {
@@ -42,8 +77,8 @@ export function Landing({ theme, onToggleTheme, onStart }: Props) {
           <nav aria-label="Primary" className="hidden items-center gap-7 text-sm text-subtle md:flex">
             <a href="#features" className="transition-colors duration-fast hover:text-fg">Features</a>
             <a href="#how" className="transition-colors duration-fast hover:text-fg">How it works</a>
-            <span title="Coming soon" aria-disabled="true" className="cursor-default opacity-60">Pricing</span>
-            <span title="Coming soon" aria-disabled="true" className="cursor-default opacity-60">Docs</span>
+            <a href="#pricing" className="transition-colors duration-fast hover:text-fg">Pricing</a>
+            <button type="button" onClick={onDocs} className="transition-colors duration-fast hover:text-fg">Docs</button>
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle theme={theme} onToggle={onToggleTheme} />
@@ -164,6 +199,54 @@ export function Landing({ theme, onToggleTheme, onStart }: Props) {
               </motion.li>
             ))}
           </ul>
+        </section>
+
+        <section id="pricing" aria-labelledby="pricing-h" className="border-t bg-surface">
+          <div className="mx-auto max-w-6xl px-6 py-16">
+            <p className="eyebrow text-center">Pricing</p>
+            <h2 id="pricing-h" className="mt-2 text-center font-display text-3xl font-bold tracking-tight">Simple plans, serious agent</h2>
+            <p className="mx-auto mt-3 max-w-md text-center text-sm leading-relaxed text-subtle">
+              Every plan includes the full plan → edit → test → repair → verify loop. Pick the throughput you need.
+            </p>
+            <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {plans.map((p, i) => (
+                <motion.li
+                  key={p.name}
+                  initial={reduce ? false : { opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: reduce ? 0 : 0.06 * i, duration: 0.4 }}
+                  className={`panel relative flex flex-col p-6 ${p.featured ? 'border-accent' : ''}`}
+                >
+                  {p.featured && (
+                    <span className="absolute -top-2.5 left-6 rounded-full bg-accent px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-on-accent">
+                      Most popular
+                    </span>
+                  )}
+                  <p className="eyebrow">{p.name}</p>
+                  <p className="mt-3 flex items-baseline gap-1">
+                    <span className="font-display text-4xl font-bold tracking-tight">${p.price}</span>
+                    <span className="font-mono text-xs text-subtle">/mo</span>
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-subtle">{p.blurb}</p>
+                  <ul className="mt-5 flex-1 space-y-2">
+                    {p.features.map(f => (
+                      <li key={f} className="flex items-start gap-2.5 text-sm">
+                        <Check size={14} className="mt-0.5 shrink-0 text-ok" aria-hidden />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-6">
+                    <Button full size="sm" onClick={onStart} variant={p.featured ? 'primary' : 'ghost'}>{p.cta}</Button>
+                  </div>
+                </motion.li>
+              ))}
+            </ul>
+            <p className="mt-6 text-center font-mono text-[11px] text-subtle">
+              Prices in USD, billed monthly · cancel anytime
+            </p>
+          </div>
         </section>
       </main>
     </div>

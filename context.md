@@ -42,7 +42,7 @@ Primary flow:
 | DB / Auth | Supabase (Postgres + PostgREST + GitHub OAuth) |
 | LLM | Nebius Token Factory, model `nvidia/Nemotron-3-Ultra-550b-a55b` |
 
-**Implemented:** clone, workspace tree/file APIs, agent analyze, persistent runs + events, real unified-diff `apply_patch`, git-backed `inspect_diff`, sandboxed test runner, autonomous repair loop, batched tool-call parsing with repeat guard, prompt scoring/improvement, token & efficiency analytics, architecture map, dark/light themes.
+**Implemented:** clone, workspace tree/file APIs, agent analyze, persistent runs + events, real unified-diff `apply_patch`, git-backed `inspect_diff`, sandboxed test runner, autonomous repair loop, batched tool-call parsing with repeat guard, prompt scoring/improvement, token & efficiency analytics, fit-to-view architecture map (whole file tree visible at once), marketing landing with pricing tiers (Free/Basic/Pro/Elite) and an in-app Docs handbook, clickable logo acting as a back button, dark/light themes.
 
 **Not implemented:** git branch/commit automation (in development), GitHub PR creation (planned).
 
@@ -68,4 +68,4 @@ Primary flow:
 
 - Product name: **CodeForge AI** (wordmark: `CODEFORGE` bold + `AI` in accent).
 - Logo: anvil mark served as `frontend/public/logo.png` (introduced by the "anvil rebrand" — the old `Logo.tsx` component was removed; screens render `<img src="/logo.png">` plus the wordmark).
-- Design language: "editorial warm" — ink/cream base, burgundy, sage, denim, rust accents; serif display headings + mono labels. See [design.md](design.md).
+- Design language: "editorial warm" — ink/cream base, burgundy, sage, denim, rust accents plus a dedicated green token for the READY state; serif display headings + mono labels. See [design.md](design.md).

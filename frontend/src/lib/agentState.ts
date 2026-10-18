@@ -4,7 +4,7 @@ export interface StateMeta { label: string; dot: string; active: boolean }
 
 /** Colors reference Tailwind token classes only. */
 export const stateMeta: Record<AgentState, StateMeta> = {
-  READY: { label: 'READY', dot: 'bg-sage', active: false },
+  READY: { label: 'READY', dot: 'bg-green', active: false },
   ANALYZING: { label: 'ANALYZING', dot: 'bg-denim', active: true },
   EXPLORING: { label: 'EXPLORING', dot: 'bg-denim', active: true },
   SEARCHING: { label: 'SEARCHING', dot: 'bg-denim', active: true },

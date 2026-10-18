@@ -10,6 +10,7 @@ interface Props {
   state: AgentState
   navOpen: boolean
   onToggleNav: () => void
+  onLogoClick: () => void
   theme: 'light' | 'dark'
   onToggleTheme: () => void
   user: User | null
@@ -19,6 +20,7 @@ export function Header({
   state,
   navOpen,
   onToggleNav,
+  onLogoClick,
   theme,
   onToggleTheme,
   user,
@@ -50,7 +52,7 @@ export function Header({
         <Menu size={18} aria-hidden />
       </button>
 
-      <Brand size="sm" />
+      <Brand size="sm" onClick={onLogoClick} ariaLabel="Back to home" />
 
       <div className="ml-auto flex items-center gap-2.5 sm:gap-3">
         <span className="hidden rounded-full border bg-raised px-3 py-1.5 sm:inline-flex">

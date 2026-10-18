@@ -23,7 +23,7 @@ Principles:
 |---|---|
 | Ink (dark surfaces) | `--ink`, `--ink-soft`, `--ink-raised` |
 | Cream (light surfaces) | `--cream`, `--cream-deep`, `--cream-muted` |
-| Brand & accents | `--burgundy` (+ light/dark), `--sage` (+ light), `--denim` (+ light), `--rust`, `--muted` |
+| Brand & accents | `--burgundy` (+ light/dark), `--sage` (+ light), `--green`, `--denim` (+ light), `--rust`, `--muted` |
 | Borders | `--border` (13%), `--border-strong` (28%), `--border-on-ink` |
 | Semantic (theme-aware) | `--bg`, `--surface`, `--fg`, `--subtle`, `--accent`, `--ok`, `--bad`, `--info`, `--raised`, `--line`, `--on-accent` |
 | Code | `--diff-add-bg`, `--diff-del-bg`, `--syn-keyword` (burgundy), `--syn-string` (sage), `--syn-comment` (muted), `--syn-number` (rust), `--syn-fn` (denim) |
@@ -69,7 +69,8 @@ Conventions: uppercase mono micro-labels with tracking (`eyebrow` class); tabula
 | PromptComposer | `agent/PromptComposer.tsx` | Task input + model select + score + run; focus lifts (`border-accent shadow-lift`) |
 | AgentStatus / StatusPill | `agent/` | State dot + mono label + sub-status, `aria-live="polite"` |
 | ChangesTab / TestsTab / VerificationTab | `run/` | Agent panel tab contents |
-| Logo lockup | inline (no component) | `<img src="/logo.png">` + `CODEFORGE` bold + `AI` in accent, tracking 0.2em |
+| Logo lockup (`Brand`) | `ui/Brand.tsx` | `<img src="/logo.png">` + `CODEFORGE` bold + `AI` in accent, tracking 0.18–0.2em; accepts `onClick` to render as a back button |
+| ArchitectureMap | `insights/ArchitectureMap.tsx` | Auto-fitted SVG — the complete architecture always visible at once (viewBox scaling, no zoom/scroll). Directories are labelled boxes, files are dots (accent = entry point), wide sibling levels wrap into bands, clone storage omitted; hover tooltips + repo-overview sidebar |
 
 **Brand lockup (canonical):**
 
@@ -89,7 +90,7 @@ Conventions: uppercase mono micro-labels with tracking (`eyebrow` class); tabula
 
 ### 5.1 Landing (`screens/Landing.tsx`)
 
-Header (lockup + nav: Features, How it works, theme toggle) → hero with headline, subcopy, CTAs → feature grid (`#features`) → workflow (`#how`) → footer. Full-bleed ink hero in dark theme; max-w-6xl content width.
+Header (lockup + nav: Features, How it works, Pricing, Docs, theme toggle) → hero with headline, subcopy, CTAs → feature grid (`#features`) → workflow (`#how`) → **pricing** (`#pricing`: Free $0 / Basic $12 / Pro $29 "Most popular" / Elite $79 — hairline panels, mono eyebrows, sage checks, sign-in CTAs) → footer. Full-bleed ink hero in dark theme; max-w-6xl content width.
 
 ### 5.2 Login (`screens/Auth.tsx`) — GitHub-only split card
 
@@ -99,11 +100,15 @@ Header (lockup + nav: Features, How it works, theme toggle) → hero with headli
   - **Right — showcase panel:** ink panel with dot-grid texture + soft glows, mini terminal card, branch chip, avatar cluster, `agent/analyze` chip, "repair-verified" badge, ±diff chip; caption **"Ship with an agent, not a chatbot."**
 - Password/email login intentionally removed — GitHub is the only path.
 
-### 5.3 Workspace shell (`screens/Workspace.tsx`)
+### 5.3 Docs (`screens/Docs.tsx`)
+
+In-app product handbook: sticky header (clickable brand → back) + "On this page" sticky TOC sidebar (Getting started · Agent workflow · Tools · Workspace & safety · Prompts · Panels · FAQ) and prose sections in a `max-w-2xl` column. Anchor links use `scroll-mt-24` to clear the sticky header; closing CTA → get started.
+
+### 5.4 Workspace shell (`screens/Workspace.tsx`)
 
 Header (lockup, agent status, theme toggle, menu) + Sidebar view switcher. Views: `repositories` · `files` · `agent` · `changes` · `tests` · `architecture` · `prompt` (Prompt Lab) · `usage` · `efficiency`.
 
-### 5.4 Agent view
+### 5.5 Agent view
 
 Bordered surface panel (`bg-surface`, `shadow-raised`) containing:
 
@@ -112,13 +117,14 @@ Bordered surface panel (`bg-surface`, `shadow-raised`) containing:
 3. **Tab bar** — ACTIVITY · CHANGES · TESTS · VERIFICATION (underline tabs) + mono event counter (`N events`, `aria-live`).
 4. **Tab content** — ACTIVITY: task quote + event timeline (timestamp · state dot · text · detail) + plan list + RESET/VIEW CHANGES actions; CHANGES: file list + DiffViewer; TESTS: pass/fail rows with durations; VERIFICATION: success/failure summary + metrics table + plan.
 
-### 5.5 Status vocabulary (agent states → visuals)
+### 5.6 Status vocabulary (agent states → visuals)
 
 `stateMeta` (`lib/agentState.ts`) maps each `AgentState` to `{label, dot, active}`:
 
 | Dot color | States |
 |---|---|
-| `bg-sage` | READY, COMPLETED |
+| `bg-green` | READY |
+| `bg-sage` | COMPLETED |
 | `bg-denim` | ANALYZING, EXPLORING, SEARCHING, READING |
 | `bg-burgundy-light` | PLANNING, IMPLEMENTING |
 | `bg-burgundy` | MODIFICATION, REPAIR |

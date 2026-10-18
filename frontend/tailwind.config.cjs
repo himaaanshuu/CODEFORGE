@@ -11,6 +11,7 @@ module.exports = {
         cream: { DEFAULT: v('cream'), deep: v('cream-deep'), muted: v('cream-muted') },
         burgundy: { DEFAULT: v('burgundy'), light: v('burgundy-light'), dark: v('burgundy-dark') },
         sage: { DEFAULT: v('sage'), light: v('sage-light') },
+        green: v('green'),
         denim: { DEFAULT: v('denim'), light: v('denim-light') },
         rust: v('rust'),
         muted: v('muted'),

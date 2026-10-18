@@ -332,8 +332,11 @@ Developer Review
 | Token estimation | ✅ Available | Heuristic pre-flight input/output token estimator |
 | Token usage analytics | ✅ Available | Usage dashboard with cost breakdown & charts |
 | Agent efficiency metrics | ✅ Available | Runtime, LLM calls, repair iterations, tool calls |
-| Repository architecture map | ✅ Available | Interactive visual dependency & module graph |
+| Repository architecture map | ✅ Available | Complete file tree fitted on screen at once — directories as boxes, files as dots, band-wrapped layout |
 | Dark / Light mode | ✅ Available | Editorial warm dark & clean light theme with persistence |
+| Landing pricing tiers | ✅ Available | Free $0 · Basic $12/mo · Pro $29/mo · Elite $79/mo with feature lists and CTAs |
+| In-app Docs handbook | ✅ Available | Getting started, workflow, tools, safety, prompts, panels, FAQ |
+| Clickable logo (back button) | ✅ Available | Logo navigates back from login and workspace to the landing page |
 | Git branch automation | 🔄 In Development | Automated feature branch creation |
 | Git commit automation | 🔄 In Development | Automated conventional commit creation |
 | Pull Request creation | 🔜 Planned | End-to-end GitHub PR creation via API |
@@ -604,7 +607,7 @@ Potential measurable metrics:
 
 # 🧬 Repository Architecture Map
 
-A planned developer-insight feature is an interactive code architecture graph.
+An auto-fitted architecture map built from the real file tree: directories render as labelled boxes, files as dots (accent dots are entry points), and wide sibling levels wrap into horizontal bands so the **complete architecture is always visible at once** — no zoom or scrolling. Clone storage (`cloned_repos/`) is omitted.
 
 ```mermaid
 graph TD

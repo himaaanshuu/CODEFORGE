@@ -81,7 +81,7 @@
 |---|---|---|
 | FR-7.1 | Token estimation pre-flight and post-run usage/cost breakdown (dashboard + charts). | ✅ |
 | FR-7.2 | Agent efficiency metrics: runtime, LLM calls, tool calls, repair iterations. | ✅ |
-| FR-7.3 | Repository architecture map: interactive dependency/module graph of the workspace. | ✅ |
+| FR-7.3 | Repository architecture map: interactive dependency/module graph of the workspace, auto-fitted so the complete architecture is always visible at once (no zoom/pan); node details + repo overview sidebar. | ✅ |
 
 ### FR-8 — User Interface
 
@@ -92,6 +92,9 @@
 | FR-8.3 | Agent panel with tabs ACTIVITY / CHANGES / TESTS / VERIFICATION, live status pill, event counter, plan display, reset & view-changes actions. | ✅ |
 | FR-8.4 | Dark / light theme with persistence. | ✅ |
 | FR-8.5 | Multi-model selection (incl. Super/Nano variants) from the composer. | ✅ |
+| FR-8.6 | Landing page pricing section with four tiers (Free $0 · Basic $12/mo · Pro $29/mo — most popular · Elite $79/mo), each with feature lists and sign-in CTAs; nav link anchors to it. | ✅ |
+| FR-8.7 | In-app Docs handbook screen (getting started, agent workflow, tools, safety, prompt writing, panel guide, FAQ) reachable from the landing nav; brand/back navigation to and from it. | ✅ |
+| FR-8.8 | The CodeForge logo is clickable and acts as a back button (login → landing; workspace header → landing). | ✅ |
 
 ## 2. Non-Functional Requirements
 

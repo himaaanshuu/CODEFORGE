@@ -1,6 +1,8 @@
 interface Props {
   size?: 'sm' | 'md' | 'lg'
   onInk?: boolean
+  onClick?: () => void
+  ariaLabel?: string
 }
 
 const sizes = {
@@ -9,8 +11,8 @@ const sizes = {
   lg: 'text-base',
 }
 
-export function Brand({ size = 'md', onInk = false }: Props) {
-  return (
+export function Brand({ size = 'md', onInk = false, onClick, ariaLabel = 'CodeForge AI home' }: Props) {
+  const inner = (
     <span className={`inline-flex items-center gap-2.5 font-display whitespace-nowrap leading-none ${sizes[size]}`}>
       <img src="/logo.png" alt="" aria-hidden className="h-[1.65em] w-auto" draggable={false} />
       <span>
@@ -18,5 +20,18 @@ export function Brand({ size = 'md', onInk = false }: Props) {
         <span className={`font-medium tracking-[0.18em] ${onInk ? 'text-burgundy-light' : 'text-accent'}`}>AI</span>
       </span>
     </span>
+  )
+
+  if (!onClick) return inner
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="rounded-xs transition-opacity duration-fast hover:opacity-80"
+    >
+      {inner}
+    </button>
   )
 }
