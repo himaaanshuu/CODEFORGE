@@ -302,8 +302,7 @@ class AgentState:
     def to_response(self) -> AgentResponse:
         """Convert current state to an AgentResponse."""
         return AgentResponse(
-            success=self.status.status in ("completed", "iterations_exceeded")
-            and self.iteration > 0,
+            success=self.status.status == "completed" and self.iteration > 0,
             status=self.status.status,
             summary=" | ".join(self.status.messages or ["Analysis completed"]),
             files_inspected=self.files_inspected,

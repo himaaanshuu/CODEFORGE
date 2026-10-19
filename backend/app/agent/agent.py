@@ -320,6 +320,10 @@ async def run_agent_task(
     # skipped instead of re-executed, so stuck loops cannot burn the budget.
     last_call_key: Optional[str] = None
     consecutive_repeats = 0
+    # Unparseable replies get a corrective observation; three in a row means
+    # the model is hopelessly off-format — stop honestly instead of burning
+    # the whole iteration budget.
+    consecutive_unparseable = 0
     # Previous raw LLM responses, fed back into the prompt so the model has
     # continuity across iterations (it can see what it already decided).
     previous_responses: List[str] = []
@@ -354,7 +358,7 @@ async def run_agent_task(
             prompt=combined_prompt,
             model=model_name,
             temperature=0.3,
-            max_tokens=2000,
+            max_tokens=4096,
         )
 
         # Fail fast on provider errors (missing API key, HTTP failure, ...)
@@ -378,6 +382,7 @@ async def run_agent_task(
         action = _parse_llm_response(raw_text)
 
         if action["type"] in ("tool_call", "tool_calls"):
+            consecutive_unparseable = 0
             # Normalize to a batch: a lone tool call is a batch of one.
             if action["type"] == "tool_call":
                 pending_calls = [
@@ -404,8 +409,10 @@ async def run_agent_task(
                 if only["tool_name"] != "run_tests" and key == last_call_key:
                     consecutive_repeats += 1
                     if consecutive_repeats >= 2:
-                        # Third identical call in a row: stop honestly with a
-                        # summary built from real observations, not an error.
+                        # Third identical call in a row: stop. Honest status —
+                        # "completed" only when tests actually passed; a stuck
+                        # run that never verified is a failure, not a success.
+                        tests_passed = state.verification_status == "passed"
                         bits = []
                         if state.tools_used:
                             bits.append(f"Tools used: {', '.join(state.tools_used)}.")
@@ -421,8 +428,18 @@ async def run_agent_task(
                             f"Stopped: the agent repeated '{only['tool_name']}' "
                             f"without new information. " + " ".join(bits)
                         ).strip()
-                        state.status.status = "completed"
-                        state.status.messages = [repeat_summary or "Exploration complete."]
+                        if tests_passed:
+                            state.status.status = "completed"
+                            state.status.messages = [
+                                repeat_summary or "Exploration complete."
+                            ]
+                        else:
+                            state.status.status = "failed"
+                            state.status.error = (
+                                repeat_summary
+                                or "Agent stopped without completing the task."
+                            )
+                            state.status.messages = [state.status.error]
                         if state.files_changed and not state.plan:
                             state.set_plan(
                                 [f"Modified: {f}" for f in state.files_changed]
@@ -431,11 +448,20 @@ async def run_agent_task(
                         response = _finalize_response(
                             response, state, started_at, total_tokens, model_name
                         )
-                        state.add_event(
-                            AgentCompletedEvent(
-                                summary=state.status.messages[0], status="completed"
+                        if tests_passed:
+                            state.add_event(
+                                AgentCompletedEvent(
+                                    summary=state.status.messages[0],
+                                    status="completed",
+                                )
                             )
-                        )
+                        else:
+                            response.error = state.status.error
+                            state.add_event(
+                                AgentFailedEvent(
+                                    error=state.status.error or repeat_summary
+                                )
+                            )
                         return response
                     state.add_observation(
                         tool_name=only["tool_name"],
@@ -474,6 +500,7 @@ async def run_agent_task(
             continue
 
         elif action["type"] == "final_analysis":
+            consecutive_unparseable = 0
             # Agent has completed its analysis
             summary = action.get("summary", "Analysis completed")
             state.status.status = "completed"
@@ -516,7 +543,26 @@ async def run_agent_task(
             return response
 
         else:
-            # Unknown action - continue looping
+            # Unparseable reply: tell the model exactly what format is needed
+            # so the next iteration can recover, instead of looping blind.
+            consecutive_unparseable += 1
+            if consecutive_unparseable >= 3:
+                state.status.status = "failed"
+                state.status.error = (
+                    "Agent stopped: 3 consecutive replies were not valid "
+                    "tool-call JSON."
+                )
+                state.status.messages = [state.status.error]
+                break
+            state.add_observation(
+                tool_name="llm",
+                tool_success=False,
+                observation=(
+                    "Your last reply was not valid JSON. Respond with ONLY a "
+                    'JSON tool call {"tool": "...", "arguments": {...}} or '
+                    '{"final": {"summary": "...", "plan": [...]}}. No prose.'
+                ),
+            )
             continue
 
     # If we get here, iterations exceeded or repair failed
