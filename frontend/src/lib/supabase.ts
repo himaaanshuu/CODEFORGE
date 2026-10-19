@@ -72,6 +72,10 @@ if (supabase) {
       }
     }
   })
+  // Quietly refresh the session on load so the GitHub provider_token is
+  // renewed after long idle periods (laptop sleep). Requires "Allow refresh
+  // tokens" on the Supabase GitHub provider; harmless when unsupported.
+  void supabase.auth.refreshSession().catch(() => undefined)
 }
 
 /** True when Supabase auth is usable in this browser build. */
