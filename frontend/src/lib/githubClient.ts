@@ -6,7 +6,10 @@
  */
 
 import type { RepoSummary } from '../types'
-import { getGitHubProviderToken } from './supabase'
+import { clearGitHubProviderToken, getGitHubProviderToken } from './supabase'
+
+/** Thrown when the GitHub token is missing or rejected — the user must reconnect. */
+export class GitHubAuthError extends Error {}
 
 interface GitHubRepo {
   name: string
@@ -42,8 +45,8 @@ function formatUpdated(iso: string): string {
 export async function fetchGitHubRepos(): Promise<RepoSummary[]> {
   const token = getGitHubProviderToken()
   if (!token) {
-    throw new Error(
-      'No GitHub token in this session — sign out and “Continue with GitHub” again.',
+    throw new GitHubAuthError(
+      'No GitHub token in this session — reconnect GitHub to load your repositories.',
     )
   }
   const res = await fetch(
@@ -65,7 +68,11 @@ export async function fetchGitHubRepos(): Promise<RepoSummary[]> {
       /* keep status-only message */
     }
     if (res.status === 401) {
-      detail += ' — the GitHub token expired; sign in with GitHub again.'
+      // Stale token — drop it so a fresh GitHub sign-in re-issues one.
+      clearGitHubProviderToken()
+      throw new GitHubAuthError(
+        'GitHub API 401: Bad credentials — the GitHub token expired. Reconnect GitHub to continue.',
+      )
     }
     throw new Error(detail)
   }

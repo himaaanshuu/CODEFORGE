@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { AgentController } from '../hooks/useAgentRun'
 import type { RepoNode, RepoSummary, RunTab, ViewId } from '../types'
 import { fetchFile, fetchTree, cloneGitHubRepo, modelForLabel } from '../lib/agentClient'
-import { fetchGitHubRepos } from '../lib/githubClient'
+import { fetchGitHubRepos, GitHubAuthError } from '../lib/githubClient'
+import { signInWithGitHub, signOutUser } from '../lib/supabase'
 import { scorePrompt } from '../lib/promptScore'
 import { AgentActivity } from '../components/agent/AgentActivity'
 import { PromptComposer } from '../components/agent/PromptComposer'
@@ -58,6 +59,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
 
   const [githubRepos, setGithubRepos] = useState<RepoSummary[] | null>(null)
   const [githubError, setGithubError] = useState<string | null>(null)
+  const [githubAuthExpired, setGithubAuthExpired] = useState(false)
 
   const [tree, setTree] = useState<RepoNode | null>(null)
   const [treeError, setTreeError] = useState<string | null>(null)
@@ -69,19 +71,29 @@ export function Workspace({ view, agent, onNavigate }: Props) {
 
   const report = useMemo(() => scorePrompt(prompt), [prompt])
 
-  useEffect(() => {
-    let alive = true
+  const loadGithubRepos = useCallback(() => {
+    setGithubError(null)
+    setGithubAuthExpired(false)
     fetchGitHubRepos()
-      .then((repos) => {
-        if (alive) setGithubRepos(repos)
-      })
+      .then((repos) => setGithubRepos(repos))
       .catch((err: unknown) => {
-        if (alive) setGithubError(err instanceof Error ? err.message : 'Could not load GitHub repositories')
+        setGithubError(
+          err instanceof Error ? err.message : 'Could not load GitHub repositories',
+        )
+        if (err instanceof GitHubAuthError) {
+          setGithubAuthExpired(true)
+          // A dead GitHub token means the session is unusable — sign out of
+          // Supabase too so the app returns to the sign-in page instead of a
+          // zombie "logged in" state. If sign-out itself fails the alert and
+          // Reconnect button above remain as the fallback.
+          signOutUser().catch(() => undefined)
+        }
       })
-    return () => {
-      alive = false
-    }
   }, [])
+
+  useEffect(() => {
+    loadGithubRepos()
+  }, [loadGithubRepos])
 
   const loadTree = useCallback(() => {
     if (workspaceId === null) {
@@ -221,7 +233,25 @@ export function Workspace({ view, agent, onNavigate }: Props) {
           subtitle="Your GitHub repositories. Select one to clone it and browse its files."
         />
         {githubError && (
-          <Alert variant="error" title="GitHub" className="mt-6">{githubError}</Alert>
+          <Alert variant="error" title="GitHub" className="mt-6">
+            {githubError}
+            {githubAuthExpired && (
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    signInWithGitHub().catch((err: unknown) =>
+                      setGithubError(
+                        err instanceof Error ? err.message : 'Could not reconnect GitHub',
+                      ),
+                    )
+                  }}
+                >
+                  Reconnect GitHub
+                </Button>
+              </div>
+            )}
+          </Alert>
         )}
         {cloningRepo && (
           <Alert variant="info" title="Cloning repository" className="mt-6">

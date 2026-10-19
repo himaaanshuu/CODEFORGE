@@ -149,3 +149,16 @@ export async function getCurrentAccessToken(): Promise<string | null> {
 export function getGitHubProviderToken(): string | null {
   return cachedGitHubToken
 }
+
+/**
+ * Drop the cached GitHub token (e.g. after a GitHub 401). The next
+ * "Continue with GitHub" sign-in re-issues a fresh provider_token.
+ */
+export function clearGitHubProviderToken(): void {
+  cachedGitHubToken = null
+  try {
+    window.localStorage.removeItem(GITHUB_TOKEN_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+}
