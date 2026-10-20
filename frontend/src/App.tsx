@@ -9,6 +9,7 @@ import { Sidebar } from './components/layout/Sidebar'
 import { Workspace } from './screens/Workspace'
 import { Landing } from './screens/Landing'
 import { Auth } from './screens/Auth'
+import type { AuthMode } from './screens/Auth'
 import { Docs } from './screens/Docs'
 
 type Route = 'landing' | 'auth' | 'docs' | 'workspace'
@@ -18,8 +19,18 @@ export default function App() {
   const { theme, toggle } = useTheme()
   const auth = useAuth()
   const [route, setRoute] = useState<Route>('landing')
+  const [authMode, setAuthMode] = useState<AuthMode>('signup')
   const [view, setView] = useState<ViewId>('agent')
   const [navOpen, setNavOpen] = useState(false)
+
+  const startAuth = (mode: AuthMode = 'signup') => {
+    if (auth.status === 'signed-in') {
+      setRoute('workspace')
+      return
+    }
+    setAuthMode(mode)
+    setRoute('auth')
+  }
 
   // A signed-in user always lands in the workspace; signing out returns home.
   useEffect(() => {
@@ -43,7 +54,7 @@ export default function App() {
       <Landing
         theme={theme}
         onToggleTheme={toggle}
-        onStart={() => setRoute('auth')}
+        onStart={startAuth}
         onDocs={() => setRoute('docs')}
       />
     )
@@ -55,7 +66,7 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggle}
         onBack={() => setRoute('landing')}
-        onStart={() => setRoute(auth.status === 'signed-in' ? 'workspace' : 'auth')}
+        onStart={startAuth}
       />
     )
   }
@@ -64,6 +75,7 @@ export default function App() {
     return (
       <Auth
         theme={theme}
+        mode={authMode}
         onToggleTheme={toggle}
         onBack={() => setRoute('landing')}
       />

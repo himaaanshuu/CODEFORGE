@@ -5,7 +5,12 @@ import { Button } from '../components/ui/Button'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import type { Theme } from '../hooks/useTheme'
 
-interface Props { theme: Theme; onToggleTheme: () => void; onStart: () => void; onDocs: () => void }
+interface Props {
+  theme: Theme
+  onToggleTheme: () => void
+  onStart: (mode?: 'signin' | 'signup') => void
+  onDocs: () => void
+}
 
 type Tone = 'bad' | 'ok'
 const pipeline: { label: string; note: string; icon: LucideIcon; tone?: Tone }[] = [
@@ -82,8 +87,8 @@ export function Landing({ theme, onToggleTheme, onStart, onDocs }: Props) {
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-            <span className="hidden sm:block"><Button variant="ghost" size="sm" onClick={onStart}>Sign in</Button></span>
-            <Button size="sm" onClick={onStart}>Sign up</Button>
+            <span className="hidden sm:block"><Button variant="ghost" size="sm" onClick={() => onStart('signin')}>Sign in</Button></span>
+            <Button size="sm" onClick={() => onStart('signup')}>Sign up</Button>
           </div>
         </div>
       </header>
@@ -106,7 +111,7 @@ export function Landing({ theme, onToggleTheme, onStart, onDocs }: Props) {
                 tests its changes, repairs failures, and verifies the result.
               </motion.p>
               <motion.div {...rise(3)} className="mt-8 flex flex-wrap gap-3">
-                <Button onClick={onStart}>Get started</Button>
+                <Button onClick={() => onStart('signup')}>Get started</Button>
                 <a
                   href="#how"
                   className="inline-flex items-center justify-center whitespace-nowrap rounded-sm border border-strong bg-surface px-5 py-2.5 font-display text-xs font-semibold tracking-[0.1em] transition-colors duration-fast hover:bg-raised"
@@ -238,7 +243,7 @@ export function Landing({ theme, onToggleTheme, onStart, onDocs }: Props) {
                     ))}
                   </ul>
                   <div className="mt-6">
-                    <Button full size="sm" onClick={onStart} variant={p.featured ? 'primary' : 'ghost'}>{p.cta}</Button>
+                    <Button full size="sm" onClick={() => onStart('signup')} variant={p.featured ? 'primary' : 'ghost'}>{p.cta}</Button>
                   </div>
                 </motion.li>
               ))}

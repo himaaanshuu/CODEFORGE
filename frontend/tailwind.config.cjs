@@ -41,8 +41,12 @@ module.exports = {
       transitionDuration: { fast: 'var(--dur-fast)', base: 'var(--dur-base)' },
       keyframes: {
         pulseDot: { '0%,100%': { opacity: '1' }, '50%': { opacity: '0.35' } },
+        fadeIn: { from: { opacity: '0', transform: 'translateY(3px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
       },
-      animation: { 'pulse-dot': 'pulseDot 1.6s ease-in-out infinite' },
+      animation: {
+        'pulse-dot': 'pulseDot 1.6s ease-in-out infinite',
+        'fade-in': 'fadeIn 0.3s ease-out both',
+      },
     },
   },
   plugins: [],
