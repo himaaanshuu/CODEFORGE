@@ -261,7 +261,13 @@ Available tools:
    - Input: {{"patch": "unified diff text"}}
    - Output: {{"success": true, "files_changed": ["file.py"], "message": "Patch applied successfully."}}
    - Use this as the primary modification mechanism
-   - The patch should be a valid unified diff format
+   - MINIMAL patches only: one hunk covering ONLY the lines you change, with
+     2-3 context lines. NEVER restate the whole file — oversized patches are
+     truncated and fail to apply.
+   - Example (modify an existing file):
+     {{"tool": "apply_patch", "arguments": {{"patch": "diff --git a/backend/app/utils.py b/backend/app/utils.py\n--- a/backend/app/utils.py\n+++ b/backend/app/utils.py\n@@ -1,2 +1,8 @@\n existing line\n+def shorten_path(path: str, max_len: int = 40) -> str:\n+    ...\n existing line"}}}}
+   - Example (create a new file): use a --- /dev/null header:
+     "diff --git a/backend/tests/test_utils.py b/backend/tests/test_utils.py\nnew file mode 100644\n--- /dev/null\n+++ b/backend/tests/test_utils.py\n@@ -0,0 +1,3 @@\n+line 1\n+line 2\n+line 3"
 
 5. inspect_diff: Inspect current changes/diff in the workspace
    - Input: (no inputs required)
@@ -300,6 +306,10 @@ Rules:
 - After modifying, always inspect the diff to verify changes
 - Run tests to verify changes are correct
 - Stay within the repository workspace
+- HARD LIMIT: at most 2-3 inspection steps before you modify something. If the
+  task asks for a change and the target file does not exist, CREATE it with
+  write_file or a new-file apply_patch. Do not re-list directories you have
+  already listed. Exploration is not the task — editing is.
 
 Think step by step and use tools when you need repository information.
 """

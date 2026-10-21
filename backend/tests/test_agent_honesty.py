@@ -92,3 +92,64 @@ async def test_unparseable_replies_stop_honestly(monkeypatch: pytest.MonkeyPatch
     assert result.iteration == 3
     # The corrective observation must appear in the follow-up prompt.
     assert any("Respond with ONLY" in c for c in calls[1:])
+
+
+@pytest.mark.asyncio
+async def test_final_claiming_changes_without_edits_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A final answer claiming edits with zero files changed is a lie."""
+
+    async def _stub(prompt: str, model: Any = None, **kwargs: Any) -> Any:
+        return _ok_llm(
+            '{"final": {"summary": "Added the helper function to utils.py.", '
+            '"plan": ["step one"]}}'
+        )
+
+    monkeypatch.setattr(agent_mod, "_call_llm_with_prompt", _stub)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = await run_agent_task(
+            workspace_root=tmpdir,
+            task="add a helper",
+            model="Nemotron 3 Super",
+        )
+
+    assert result.status == "failed"
+    assert result.success is False
+    assert "no files were" in (result.error or "").lower() or "not applied" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_final_claiming_tests_pass_without_running_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A final answer claiming tests pass without run_tests is a lie."""
+
+    executed: list[str] = []
+
+    async def _stub(prompt: str, model: Any = None, **kwargs: Any) -> Any:
+        # First turn: write a file for real. Second turn: lie about tests.
+        if not executed:
+            executed.append("write")
+            return _ok_llm(
+                '{"tool": "write_file", "arguments": {"path": "notes.txt", '
+                '"content": "hello\\n"}}'
+            )
+        return _ok_llm(
+            '{"final": {"summary": "Created notes.txt. All tests pass.", '
+            '"plan": ["wrote notes.txt"]}}'
+        )
+
+    monkeypatch.setattr(agent_mod, "_call_llm_with_prompt", _stub)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = await run_agent_task(
+            workspace_root=tmpdir,
+            task="create a notes file",
+            model="Nemotron 3 Super",
+        )
+
+    assert result.status == "failed"
+    assert result.success is False
+    assert "never executed" in (result.error or "").lower()

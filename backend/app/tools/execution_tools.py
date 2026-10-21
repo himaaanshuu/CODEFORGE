@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import signal
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -13,16 +13,23 @@ from typing import Any, Dict, List, Optional
 
 
 def _get_python_path() -> str:
-    """Get the path to the Python executable to use for running tests."""
-    # Use the Python executable from the environment
-    # When running within the CodeForge AI venv, this will use the venv's Python
-    # When running elsewhere, fall back to python3
-    venv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "..", "..", "..", ".venv", "bin", "python")
-    if os.path.exists(venv_path):
-        return venv_path
-    # Fall back to python3
-    return "python3"
+    """Get the Python executable to use for running tests.
+
+    Prefers the project venv (Windows Scripts/ and Unix bin/ layouts), then
+    falls back to the current interpreter — never a bare "python3" that may
+    not exist on Windows.
+    """
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[3] / "venv" / "Scripts" / "python.exe",  # Windows venv
+        here.parents[3] / ".venv" / "Scripts" / "python.exe",
+        here.parents[3] / "venv" / "bin" / "python",  # Unix venv
+        here.parents[3] / ".venv" / "bin" / "python",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
 
 
 FORBIDDEN_COMMANDS = {"rm", "sudo", "curl", "wget", "ssh", "scp", "kill", "killall"}
@@ -68,26 +75,15 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
             "test_summary": {"passed": 0, "failed": 0, "skipped": 0, "errors": 0},
         }
 
-    # Determine the Python executable and test command
+    # Determine the Python executable and test command. Extra arguments after
+    # the allow-listed command name (e.g. a specific test path) are passed
+    # through so the model can target a single test file.
     python_path = _get_python_path()
+    extra_args = cmd_parts[1:] if len(cmd_parts) > 1 else []
 
-    # Build the actual command to run based on the command name
-    if cmd_name == "pytest":
-        # Use python -m pytest with the workspace root as rootdir
-        actual_cmd = [python_path, "-m", "pytest"]
-        actual_cmd_args = ["-v", "--tb=short"]
-        # Add the workspace root as the directory to search for tests
-        # pytest will discover tests in the rootdir
-    elif cmd_name in ("python", "python3"):
-        # Run pytest discovery
-        actual_cmd = [python_path, "-m", "pytest"]
-        actual_cmd_args = ["-v", "--tb=short"]
-    else:
-        # Default to pytest
-        actual_cmd = [python_path, "-m", "pytest"]
-        actual_cmd_args = ["-v", "--tb=short"]
+    actual_cmd = [python_path, "-m", "pytest", "-v", "--tb=short", *extra_args]
 
-    # Set timeout
+    # Set timeout (subprocess timeout — portable, no signal.alarm)
     timeout = 60  # seconds
 
     # Sanitize environment - only pass through safe variables
@@ -100,85 +96,39 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
     # Execute the command
     start_time = time.time()
     timed_out = False
-
-    def timeout_handler(signum, frame):
-        nonlocal timed_out
-        timed_out = True
-        raise TimeoutError("Execution timed out")
-
-    # Set timeout alarm
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(timeout)
+    stdout = ""
+    stderr = ""
+    exit_code: Optional[int] = None
+    max_output = 100_000  # 100KB limit
+    max_error = 10_000  # 10KB limit
 
     try:
-        # Run the test command in the workspace directory
-        process = subprocess.Popen(
-            actual_cmd + actual_cmd_args,
+        completed = subprocess.run(
+            actual_cmd,
             cwd=workspace_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
             text=True,
+            timeout=timeout,
         )
-
-        # Read output with size limits
-        stdout_chunks = []
-        stderr_chunks = []
-        stdout_size = 0
-        stderr_size = 0
-        max_output = 100_000  # 100KB limit
-        max_error = 10_000  # 10KB limit
-
-        try:
-            # Read stdout
-            while True:
-                line = process.stdout.readline()
-                if not line:
-                    break
-                if stdout_size + len(line.encode()) > max_output:
-                    stdout_chunks.append("... [output truncated] ...")
-                    stdout_size = max_output
-                    break
-                stdout_size += len(line.encode())
-                stdout_chunks.append(line)
-
-            # Read stderr
-            while True:
-                line = process.stderr.readline()
-                if not line:
-                    break
-                if stderr_size + len(line.encode()) > max_error:
-                    stderr_chunks.append("... [error output truncated] ...")
-                    stderr_size = max_error
-                    break
-                stderr_size += len(line.encode())
-                stderr_chunks.append(line)
-
-        except TimeoutError:
-            timed_out = True
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except Exception:
-                process.kill()
-                process.wait()
-
-        finally:
-            signal.alarm(0)  # Cancel the alarm
-            signal.signal(signal.SIGALRM, old_handler)
-
-        # Get the exit code
-        exit_code: Optional[int] = None
-        try:
-            exit_code = process.wait(timeout=5)
-        except Exception:
-            exit_code = None
-
-        duration_ms = int((time.time() - start_time) * 1000)
-
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
+        exit_code = completed.returncode
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        stdout = exc.stdout if isinstance(exc.stdout, str) else ""
+        stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "error": f"Python interpreter not found: {python_path}",
+            "exit_code": None,
+            "duration_ms": int((time.time() - start_time) * 1000),
+            "timed_out": False,
+            "test_summary": {"passed": 0, "failed": 0, "skipped": 0, "errors": 0},
+        }
     except Exception as e:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
         return {
             "success": False,
             "error": f"Execution error: {str(e)[:200]}",
@@ -188,9 +138,13 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
             "test_summary": {"passed": 0, "failed": 0, "skipped": 0, "errors": 0},
         }
 
-    # Parse test results from output
-    stdout = "".join(stdout_chunks)
-    stderr = "".join(stderr_chunks)
+    duration_ms = int((time.time() - start_time) * 1000)
+    stdout_size = min(len(stdout.encode()), max_output)
+    stderr_size = min(len(stderr.encode()), max_error)
+    if len(stdout.encode()) > max_output:
+        stdout = stdout[:max_output] + "\n... [output truncated] ..."
+    if len(stderr.encode()) > max_error:
+        stderr = stderr[:max_error] + "\n... [error output truncated] ..."
 
     # Parse each count independently — pytest omits zero counts entirely
     # (e.g. "84 passed, 15 warnings in 0.40s") and ordering varies.

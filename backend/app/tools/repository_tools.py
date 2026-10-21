@@ -111,6 +111,29 @@ class ReadFileTool:
         # Resolve the path through the workspace abstraction
         resolved = self.workspace.resolve(path)
         if resolved is None:
+            # Distinguish "missing file" from "outside the workspace" so the
+            # model knows a missing target should be CREATED, not re-read.
+            import os as _os
+            from pathlib import Path as _Path
+
+            root = _Path(self.workspace.root).resolve()
+            candidate = (root / _os.path.normpath(path)).resolve()
+            try:
+                candidate.relative_to(root)
+                inside = True
+            except ValueError:
+                inside = False
+            if inside:
+                return ToolResult(
+                    name=self.name,
+                    success=False,
+                    error=(
+                        f"File does not exist: {path}. If the task requires "
+                        "this file, create it with write_file (or a new-file "
+                        "apply_patch with a --- /dev/null header) — do NOT "
+                        "re-read it."
+                    ),
+                )
             return ToolResult(
                 name=self.name,
                 success=False,

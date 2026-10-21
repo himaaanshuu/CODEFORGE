@@ -173,13 +173,22 @@ async def _run_single_tool(
 
         state.set_tests_results(data)
 
-        if failed_count > 0 or error_count > 0 or timed_out:
+        # A crashed run_tests (tool success False with zero counted failures)
+        # is NOT a pass — only trust an actual green exit.
+        tests_passed = (
+            tool_result.success
+            and failed_count == 0
+            and error_count == 0
+            and not timed_out
+        )
+
+        if not tests_passed:
             # Tests failed - trigger failure analysis
-            state.add_failure_detection(
-                f"{failed_count} failed, {error_count} error(s)" +
-                (" (timed out)" if timed_out else ""),
-                failed_count
+            fail_reason = data.get("error") or (
+                f"{failed_count} failed, {error_count} error(s)"
+                + (" (timed out)" if timed_out else "")
             )
+            state.add_failure_detection(fail_reason, failed_count)
 
             # Move to failure analysis phase
             if state.phase != AgentState.PHASE_FAILURE_ANALYSIS:
@@ -223,22 +232,39 @@ async def _run_single_tool(
             state.phase = AgentState.PHASE_VERIFICATION
             state.add_verification_started("Verifying fix with full test suite")
             state.set_verification_status("passed")
-            # Persist a real plan derived from what actually happened,
-            # so the completed run is never stored with an empty plan.
-            if not state.plan:
-                plan_steps = [
-                    "Inspected repository files",
-                    "Ran the test suite and detected failures",
-                    "Diagnosed the failing test and applied a patch",
-                ]
-                if state.files_changed:
+            if state.files_changed:
+                # Persist a real plan derived from what actually happened,
+                # so the completed run is never stored with an empty plan.
+                if not state.plan:
+                    plan_steps = ["Inspected repository files"]
+                    if state.failure_history:
+                        plan_steps.append(
+                            "Diagnosed the failing test and applied a patch"
+                        )
                     plan_steps.append(
                         f"Modified: {', '.join(state.files_changed)}"
                     )
-                plan_steps.append("Re-ran tests — all passed")
-                state.set_plan(plan_steps)
-            state.status.status = "completed"
-            state.status.messages = ["All tests passed — verification complete."]
+                    plan_steps.append("Re-ran tests — all passed")
+                    state.set_plan(plan_steps)
+                state.status.status = "completed"
+                state.status.messages = ["All tests passed — verification complete."]
+                return "break", repair_phase
+            # Green tests but zero modifications: the agent never applied the
+            # task (e.g. it just re-ran an already-passing suite). Fail
+            # honestly instead of claiming verification.
+            state.status.status = "failed"
+            state.status.error = (
+                "Tests passed but no files were modified — the agent did not "
+                "apply any changes for this task."
+            )
+            state.status.messages = [state.status.error]
+            if not state.plan:
+                state.set_plan(
+                    [
+                        "Inspected repository files",
+                        "Ran the test suite — all tests passed (no changes made)",
+                    ]
+                )
             return "break", repair_phase
     else:
         # Continue the loop (the LLM will see the tool result and decide next)
@@ -318,8 +344,11 @@ async def run_agent_task(
     repair_phase = False
     # Repeat guard: an identical non-test tool call issued twice in a row is
     # skipped instead of re-executed, so stuck loops cannot burn the budget.
-    last_call_key: Optional[str] = None
     consecutive_repeats = 0
+    # Window of recently executed non-test call keys. A call whose key is in
+    # the window is skipped — this catches alternating re-listing of the same
+    # directories, not just back-to-back identical calls.
+    recent_call_keys: List[str] = []
     # Unparseable replies get a corrective observation; three in a row means
     # the model is hopelessly off-format — stop honestly instead of burning
     # the whole iteration budget.
@@ -329,6 +358,22 @@ async def run_agent_task(
     previous_responses: List[str] = []
     while state.iteration < max_iterations:
         state.increment_iteration()
+
+        # Honest budget guard: an all-exploration run cannot succeed. When
+        # most of the budget is spent with zero modifications, stop now
+        # instead of listing directories until the cap.
+        if (
+            state.iteration >= 7
+            and not state.files_changed
+            and state.repair_attempts == 0
+        ):
+            state.status.status = "failed"
+            state.status.error = (
+                "The agent spent most of its steps inspecting the repository "
+                "without modifying any files."
+            )
+            state.status.messages = [state.status.error]
+            break
 
         # Check if we're in a repair phase and need to stop
         if repair_phase and state.repair_attempts >= state.max_repair_iterations:
@@ -351,6 +396,7 @@ async def run_agent_task(
             failure_history=state.failure_history,
             iteration=state.iteration,
             max_iterations=max_iterations,
+            files_modified=len(state.files_changed),
         )
 
         # Generate the next step from the LLM
@@ -358,7 +404,7 @@ async def run_agent_task(
             prompt=combined_prompt,
             model=model_name,
             temperature=0.3,
-            max_tokens=4096,
+            max_tokens=8192,
         )
 
         # Fail fast on provider errors (missing API key, HTTP failure, ...)
@@ -400,89 +446,121 @@ async def run_agent_task(
                     for call in action["calls"]
                 ]
 
-            # Repeat guard: an identical non-test call twice in a row means the
-            # model is stuck — skip re-execution and tell it to move on.
-            # run_tests is exempt: re-running tests after a patch is the repair loop.
-            if len(pending_calls) == 1:
-                only = pending_calls[0]
-                key = _call_key(only["tool_name"], only["arguments"])
-                if only["tool_name"] != "run_tests" and key == last_call_key:
-                    consecutive_repeats += 1
-                    if consecutive_repeats >= 2:
-                        # Third identical call in a row: stop. Honest status —
-                        # "completed" only when tests actually passed; a stuck
-                        # run that never verified is a failure, not a success.
-                        tests_passed = state.verification_status == "passed"
-                        bits = []
-                        if state.tools_used:
-                            bits.append(f"Tools used: {', '.join(state.tools_used)}.")
-                        if state.files_changed:
-                            bits.append(
-                                f"Files changed: {', '.join(state.files_changed)}."
-                            )
-                        if state.files_inspected:
-                            bits.append(
-                                f"Files inspected: {len(state.files_inspected)}."
-                            )
-                        repeat_summary = (
-                            f"Stopped: the agent repeated '{only['tool_name']}' "
-                            f"without new information. " + " ".join(bits)
-                        ).strip()
-                        if tests_passed:
-                            state.status.status = "completed"
-                            state.status.messages = [
-                                repeat_summary or "Exploration complete."
-                            ]
-                        else:
-                            state.status.status = "failed"
-                            state.status.error = (
-                                repeat_summary
-                                or "Agent stopped without completing the task."
-                            )
-                            state.status.messages = [state.status.error]
-                        if state.files_changed and not state.plan:
-                            state.set_plan(
-                                [f"Modified: {f}" for f in state.files_changed]
-                            )
-                        response = state.to_response()
-                        response = _finalize_response(
-                            response, state, started_at, total_tokens, model_name
-                        )
-                        if tests_passed:
-                            state.add_event(
-                                AgentCompletedEvent(
-                                    summary=state.status.messages[0],
-                                    status="completed",
-                                )
-                            )
-                        else:
-                            response.error = state.status.error
-                            state.add_event(
-                                AgentFailedEvent(
-                                    error=state.status.error or repeat_summary
-                                )
-                            )
-                        return response
+            # After the exploration budget with zero modifications, only
+            # editing/verification tools are accepted — reject anything else
+            # with a corrective observation instead of running it.
+            _EDIT_TOOLS = ("apply_patch", "write_file", "run_tests")
+            if (
+                not state.files_changed
+                and state.iteration >= 5
+                and all(p["tool_name"] not in _EDIT_TOOLS for p in pending_calls)
+            ):
+                state.add_observation(
+                    tool_name=pending_calls[0]["tool_name"],
+                    tool_success=False,
+                    observation=(
+                        "Rejected: inspection is over and no files have been "
+                        "modified. Call apply_patch or write_file NOW (or "
+                        "run_tests / the final JSON). Do not list or read "
+                        "anything else."
+                    ),
+                )
+                continue
+
+            # Repeat guard: a non-test call already executed within the recent
+            # window is skipped instead of re-run — this catches both
+            # back-to-back identical calls and alternating re-listing of the
+            # same directories. run_tests is exempt: re-running tests after a
+            # patch is the repair loop.
+            _RECENT_CALL_WINDOW = 6
+            to_execute: List[Dict[str, Any]] = []
+            for pending in pending_calls:
+                if pending["tool_name"] == "run_tests":
+                    to_execute.append(pending)
+                    continue
+                key = _call_key(pending["tool_name"], pending["arguments"])
+                if key in recent_call_keys:
                     state.add_observation(
-                        tool_name=only["tool_name"],
+                        tool_name=pending["tool_name"],
                         tool_success=True,
                         observation=(
-                            "Skipped: this exact call was already executed just "
-                            "before — its result is recorded above. Do NOT call "
-                            "it again; finalize with the final JSON or choose a "
-                            "different step."
+                            "Skipped: this exact call was already executed "
+                            "recently — its result is recorded above. Do NOT "
+                            "repeat it; take a NEW step: apply_patch, "
+                            "write_file, run_tests, or the final JSON."
                         ),
                     )
                     continue
-                consecutive_repeats = 0
-                last_call_key = key
+                to_execute.append(pending)
+
+            if not to_execute:
+                # Every call in the batch was a repeat — the model is stuck.
+                stuck_name = pending_calls[-1]["tool_name"] if pending_calls else "tool"
+                consecutive_repeats += 1
+                if consecutive_repeats >= 2:
+                    # Stop. Honest status — "completed" only when tests
+                    # actually passed; a stuck run that never verified is a
+                    # failure, not a success.
+                    tests_passed = state.verification_status == "passed"
+                    bits = []
+                    if state.tools_used:
+                        bits.append(f"Tools used: {', '.join(state.tools_used)}.")
+                    if state.files_changed:
+                        bits.append(
+                            f"Files changed: {', '.join(state.files_changed)}."
+                        )
+                    if state.files_inspected:
+                        bits.append(
+                            f"Files inspected: {len(state.files_inspected)}."
+                        )
+                    repeat_summary = (
+                        f"Stopped: the agent repeated '{stuck_name}' "
+                        f"without new information. " + " ".join(bits)
+                    ).strip()
+                    if tests_passed:
+                        state.status.status = "completed"
+                        state.status.messages = [
+                            repeat_summary or "Exploration complete."
+                        ]
+                    else:
+                        state.status.status = "failed"
+                        state.status.error = (
+                            repeat_summary
+                            or "Agent stopped without completing the task."
+                        )
+                        state.status.messages = [state.status.error]
+                    if state.files_changed and not state.plan:
+                        state.set_plan(
+                            [f"Modified: {f}" for f in state.files_changed]
+                        )
+                    response = state.to_response()
+                    response = _finalize_response(
+                        response, state, started_at, total_tokens, model_name
+                    )
+                    if tests_passed:
+                        state.add_event(
+                            AgentCompletedEvent(
+                                summary=state.status.messages[0],
+                                status="completed",
+                            )
+                        )
+                    else:
+                        response.error = state.status.error
+                        state.add_event(
+                            AgentFailedEvent(
+                                error=state.status.error or repeat_summary
+                            )
+                        )
+                    return response
+                continue
+            consecutive_repeats = 0
 
             stop_outer = False
-            for pending in pending_calls:
+            for pending in to_execute:
                 if pending["tool_name"] != "run_tests":
-                    last_call_key = _call_key(
-                        pending["tool_name"], pending["arguments"]
-                    )
+                    key = _call_key(pending["tool_name"], pending["arguments"])
+                    recent_call_keys.append(key)
+                    del recent_call_keys[:-_RECENT_CALL_WINDOW]
                 signal, repair_phase = await _run_single_tool(
                     pending["tool_name"],
                     pending["arguments"],
@@ -496,7 +574,6 @@ async def run_agent_task(
                     break
             if stop_outer:
                 break
-            consecutive_repeats = 0
             continue
 
         elif action["type"] == "final_analysis":
@@ -511,6 +588,55 @@ async def run_agent_task(
             plan_list = _normalize_plan(action.get("plan", []))
             if plan_list:
                 state.set_plan(plan_list)
+
+            # Honesty gate: a final answer that claims files were changed
+            # while nothing was actually modified is a hallucination — fail
+            # the run instead of reporting a green completion.
+            import re as _re
+
+            claim = _re.search(
+                r"\b(added|created|modified|updated|wrote|implemented|"
+                r"applied|patched|inserted|appended)\b",
+                summary,
+                flags=_re.I,
+            )
+            if claim and not state.files_changed:
+                state.status.status = "failed"
+                state.status.error = (
+                    "The agent claimed changes were made, but no files were "
+                    "actually modified — the run did not apply the task."
+                )
+                state.status.messages = [state.status.error]
+                response = state.to_response()
+                response.error = state.status.error
+                response = _finalize_response(
+                    response, state, started_at, total_tokens, model_name
+                )
+                state.add_event(AgentFailedEvent(error=state.status.error))
+                return response
+
+            # Same honesty rule for test claims: claiming tests pass without
+            # ever executing run_tests is a hallucination.
+            tests_claimed = _re.search(
+                r"\b(tests?|pytest)\b[^.]{0,60}\b(pass|passed|passes|passing|green)\b"
+                r"|\b(pass|passed|passes|green)\b[^.]{0,40}\b(tests?|pytest)\b",
+                summary,
+                flags=_re.I,
+            )
+            if tests_claimed and "run_tests" not in state.tools_used:
+                state.status.status = "failed"
+                state.status.error = (
+                    "The agent claimed tests pass, but the test suite was "
+                    "never executed — the run did not verify its changes."
+                )
+                state.status.messages = [state.status.error]
+                response = state.to_response()
+                response.error = state.status.error
+                response = _finalize_response(
+                    response, state, started_at, total_tokens, model_name
+                )
+                state.add_event(AgentFailedEvent(error=state.status.error))
+                return response
 
             # Build the final response
             response = state.to_response()
@@ -597,6 +723,7 @@ def _build_combined_prompt(
     failure_history: Optional[List[Dict[str, Any]]] = None,
     iteration: int = 1,
     max_iterations: int = MAX_DEFAULT_ITERATIONS,
+    files_modified: int = 0,
 ) -> str:
     """Build the combined prompt for the LLM from system prompt, task, observations,
     and the model's own previous responses (for cross-iteration continuity)."""
@@ -607,14 +734,29 @@ def _build_combined_prompt(
         f"Iteration {iteration} of at most {max_iterations}.",
     ]
 
+    # Action deadline: inspection is not the task. When nothing has been
+    # modified yet, push the model off the explore loop and onto editing.
+    if files_modified == 0 and iteration >= 3:
+        parts.append(
+            "IMPORTANT: you have not modified any files yet. Stop inspecting — "
+            "your next step MUST be apply_patch or write_file (or the final "
+            "JSON if the task truly requires no code changes)."
+        )
+    elif files_modified == 0 and iteration >= 2:
+        parts.append(
+            "Reminder: keep inspection to 2-3 steps — then apply_patch or "
+            "write_file."
+        )
+
     # The model's own previous decisions, so it can build on them instead of
     # re-issuing the same tool calls.
     if previous_responses:
         parts.append("Your previous responses (most recent last):")
         for prior in previous_responses[-3:]:
-            parts.append(f"[previous response]\n{prior}")
+            parts.append(f"[previous response]\n{prior[:800]}")
 
-    # Add observations from previous tool calls
+    # Add observations from previous tool calls. Each observation is clipped —
+    # a wall of file listings buries the instructions and bloats the prompt.
     for obs in observations[-6:]:  # Last observations
         # Handle both AgentObservation objects and dicts
         if hasattr(obs, "tool_success") and obs.tool_success:
@@ -628,7 +770,18 @@ def _build_combined_prompt(
             obs_text = obs.get("observation", "No observation")
         else:
             obs_text = getattr(obs, "observation", None) or "No observation"
+        if len(obs_text) > 3000:
+            obs_text = obs_text[:3000] + "\n… (observation truncated)"
         parts.append(f"{label}: {obs_text}")
+
+    # After the exploration budget, only editing tools are accepted — anything
+    # else is skipped by the loop, so say it explicitly here too.
+    if files_modified == 0 and iteration >= 5:
+        parts.append(
+            "FINAL WARNING: inspection is over. The ONLY acceptable next "
+            "responses are apply_patch, write_file, run_tests, or the final "
+            "JSON. Any other tool call will be rejected."
+        )
 
     # Failed patches: tell the model exactly what to avoid repeating.
     if failure_history:

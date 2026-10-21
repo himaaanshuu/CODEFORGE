@@ -556,8 +556,9 @@ class WriteFileTool:
         Only allows writing inside the workspace root.
         Rejects path traversal, absolute paths, .git, system paths.
         """
-        # Validate the path is inside the workspace and safe
-        if not _validate_path(path, self.workspace):
+        # Validate the path is inside the workspace and safe. New files are
+        # allowed — write_file is the primary creation mechanism.
+        if not _validate_new_path(path, self.workspace):
             return ToolResult(
                 name="write_file",
                 success=False,
@@ -568,9 +569,13 @@ class WriteFileTool:
         content_to_write = content.rstrip("\n") + "\n" if content else "\n"
 
         try:
-            target = Path(path)
-            resolved_target = self.workspace.resolve(path)
-            if resolved_target is None:
+            # Resolve by containment — workspace.resolve() requires the file
+            # to exist, which would make creation impossible.
+            root = Path(self.workspace.root).resolve()
+            resolved_target = (root / os.path.normpath(path)).resolve()
+            try:
+                resolved_target.relative_to(root)
+            except ValueError:
                 return ToolResult(
                     name="write_file",
                     success=False,
