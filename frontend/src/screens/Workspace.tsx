@@ -29,8 +29,6 @@ interface Props {
   onNavigate: (v: ViewId) => void
 }
 
-const DEFAULT_WORKSPACE_ID = 'local-project'
-
 const RUN_TABS: { id: RunTab; label: string }[] = [
   { id: 'activity', label: 'Activity' },
   { id: 'changes', label: 'Changes' },
@@ -60,6 +58,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   const [githubRepos, setGithubRepos] = useState<RepoSummary[] | null>(null)
   const [githubError, setGithubError] = useState<string | null>(null)
   const [githubAuthExpired, setGithubAuthExpired] = useState(false)
+  const [runNotice, setRunNotice] = useState<string | null>(null)
 
   const [tree, setTree] = useState<RepoNode | null>(null)
   const [treeError, setTreeError] = useState<string | null>(null)
@@ -155,8 +154,15 @@ export function Workspace({ view, agent, onNavigate }: Props) {
   const handleRun = () => {
     const task = prompt.trim()
     if (!task || agent.running) return
+    if (workspaceId === null) {
+      // Never run against a hidden default — make the missing repo obvious.
+      setRunNotice('Select a repository before running the agent.')
+      onNavigate('repositories')
+      return
+    }
+    setRunNotice(null)
     setTab('activity')
-    agent.start(task, workspaceId ?? DEFAULT_WORKSPACE_ID, modelForLabel(model))
+    agent.start(task, workspaceId, modelForLabel(model))
   }
 
   const changedPaths = agent.run?.filesChanged ?? []
@@ -190,6 +196,27 @@ export function Workspace({ view, agent, onNavigate }: Props) {
 
   const agentView = (
     <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
+      {workspaceId === null ? (
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-bad/35 bg-bad/8 px-3 py-1.5 text-xs text-bad">
+          No repository selected
+          <button
+            type="button"
+            onClick={() => onNavigate('repositories')}
+            className="font-semibold underline underline-offset-2 hover:text-fg"
+          >
+            Browse repositories
+          </button>
+        </p>
+      ) : (
+        <p className="chip mb-4 inline-flex items-center gap-2">
+          Repo: <span className="max-w-64 truncate font-mono text-fg">{workspaceId}</span>
+        </p>
+      )}
+      {runNotice && (
+        <Alert variant="info" title="Agent not started" className="mb-4">
+          {runNotice}
+        </Alert>
+      )}
       {agentFile && (
         <p className="mb-4 inline-flex items-center gap-2 rounded-full border bg-surface px-3 py-1.5 font-mono text-xs text-subtle">
           Target file: <span className="text-fg">{agentFile}</span>
