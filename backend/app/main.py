@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -19,7 +22,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, SecretStr
 
 from backend import supabase_service as store
 from ..auth_dep import get_current_user
@@ -300,6 +303,73 @@ class CloneRepoRequest(BaseModel):
     name: str
 
 
+class PublishChangesRequest(BaseModel):
+    files: list[str] = Field(min_length=1, max_length=100)
+    branch_name: str = Field(min_length=1, max_length=55, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    commit_message: str = Field(min_length=1, max_length=120)
+    github_token: SecretStr
+
+
+def _validated_workspace_paths(root: Path, paths: list[str]) -> list[str]:
+    validated: list[str] = []
+    for raw_path in dict.fromkeys(paths):
+        path = Path(raw_path)
+        if (
+            not raw_path
+            or raw_path.startswith(":")
+            or "\\" in raw_path
+            or path.is_absolute()
+            or ".." in path.parts
+        ):
+            raise HTTPException(status_code=400, detail="Invalid changed-file path")
+        resolved = (root / path).resolve(strict=False)
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Changed file is outside the workspace") from exc
+        validated.append(path.as_posix())
+    if not validated:
+        raise HTTPException(status_code=400, detail="No changed files were selected")
+    return validated
+
+
+def _run_git(root: Path, *args: str, timeout: int = 30, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", *args], cwd=root, capture_output=True, text=True,
+            timeout=timeout, env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Git operation timed out") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="Git is not installed on the backend") from exc
+
+
+def _askpass_files(directory: Path) -> tuple[Path, Path]:
+    """Create short-lived askpass scripts; the GitHub token stays in process env."""
+    python_script = directory / "askpass.py"
+    python_script.write_text(
+        "import sys\n"
+        "prompt = sys.argv[1].lower() if len(sys.argv) > 1 else ''\n"
+        "print('x-access-token' if 'username' in prompt else __import__('os').environ['CODEFORGE_GITHUB_TOKEN'])\n",
+        encoding="utf-8",
+    )
+    if os.name == "nt":
+        command_script = directory / "askpass.cmd"
+        command_script.write_text(
+            f'@"{sys.executable}" "{python_script}" "%~1"\r\n',
+            encoding="utf-8",
+        )
+    else:
+        command_script = directory / "askpass"
+        command_script.write_text(
+            f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(python_script))} \"$1\"\n",
+            encoding="utf-8",
+        )
+        command_script.chmod(0o700)
+    return command_script, python_script
+
+
 def _register_workspace(ws_id: str, root: Path) -> dict:
     WORKSPACE_MAPPING[ws_id] = str(root)
     return {
@@ -361,6 +431,170 @@ async def clone_repo(
         raise HTTPException(status_code=502, detail=f"Clone failed: {reason}")
 
     return _register_workspace(ws_id, dest)
+
+
+@app.post("/api/v1/workspaces/{workspace_id}/git/publish")
+async def publish_workspace_changes(
+    workspace_id: str,
+    request: PublishChangesRequest,
+    user_uid: str = Depends(get_current_user),
+) -> dict:
+    """Commit selected agent changes on a new branch and push it to GitHub."""
+    root = _resolve_workspace(workspace_id)
+    if root is None:
+        raise HTTPException(status_code=404, detail="Unknown workspace")
+    root = Path(root).resolve()
+
+    top = _run_git(root, "rev-parse", "--show-toplevel")
+    if top.returncode != 0 or Path(top.stdout.strip()).resolve() != root:
+        raise HTTPException(status_code=400, detail="Workspace root is not a Git repository")
+
+    remote = _run_git(root, "remote", "get-url", "origin")
+    if remote.returncode != 0:
+        raise HTTPException(status_code=400, detail="Workspace has no GitHub origin remote")
+    match = re.fullmatch(
+        r"(?:https://github\.com/|git@github\.com:)([A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?)/([A-Za-z0-9](?:[A-Za-z0-9._-]{0,98})?)(?:\.git)?/?",
+        remote.stdout.strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        raise HTTPException(status_code=400, detail="Origin must be a GitHub repository")
+    owner, repo = match.groups()
+    repo = re.sub(r"\.git$", "", repo, flags=re.IGNORECASE)
+
+    branch = f"codex/{request.branch_name}"
+    if ".." in branch or branch.endswith((".", ".lock", "/")):
+        raise HTTPException(status_code=400, detail="Invalid branch name")
+
+    files = _validated_workspace_paths(root, request.files)
+    blocked_suffixes = {".pem", ".key", ".p12", ".pfx"}
+    for raw_path in files:
+        path = Path(raw_path)
+        basename = path.name.lower()
+        if (basename == ".env" or basename.startswith(".env.")) and basename not in {
+            ".env.example", ".env.sample"
+        }:
+            raise HTTPException(status_code=400, detail="Secret environment files cannot be pushed")
+        if path.suffix.lower() in blocked_suffixes:
+            raise HTTPException(status_code=400, detail="Private key and certificate files cannot be pushed")
+
+    staged = _run_git(root, "diff", "--cached", "--quiet")
+    if staged.returncode == 1:
+        raise HTTPException(status_code=409, detail="Commit or unstage existing staged changes first")
+    if staged.returncode != 0:
+        raise HTTPException(status_code=400, detail="Could not inspect staged Git changes")
+
+    token = request.github_token.get_secret_value()
+    import httpx
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            user_response = await client.get("https://api.github.com/user", headers=headers)
+            if user_response.status_code != 200:
+                raise HTTPException(status_code=401, detail="GitHub authorization expired; reconnect GitHub")
+            github_user = user_response.json()
+            repo_response = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}", headers=headers
+            )
+            if repo_response.status_code != 200:
+                raise HTTPException(status_code=403, detail="GitHub token cannot access this repository")
+            permissions = repo_response.json().get("permissions") or {}
+            if permissions.get("push") is not True:
+                raise HTTPException(
+                    status_code=403,
+                    detail="GitHub authorization needs write access to this repository; reconnect with repository access",
+                )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Timed out checking GitHub authorization") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail="Could not reach GitHub to verify repository access") from exc
+
+    existing_branch = _run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
+    if existing_branch.returncode == 0:
+        raise HTTPException(status_code=409, detail=f"Branch {branch} already exists in this workspace")
+
+    switch = _run_git(root, "switch", "-c", branch)
+    if switch.returncode != 0:
+        raise HTTPException(status_code=400, detail=f"Could not create branch: {switch.stderr.strip()[:300]}")
+
+    add = _run_git(root, "add", "--", *files)
+    if add.returncode != 0:
+        raise HTTPException(status_code=400, detail=f"Could not stage selected files: {add.stderr.strip()[:300]}")
+    staged_diff = _run_git(root, "diff", "--cached", "--quiet")
+    if staged_diff.returncode == 0:
+        raise HTTPException(status_code=400, detail="Selected files have no uncommitted changes")
+    if staged_diff.returncode != 1:
+        raise HTTPException(status_code=400, detail="Could not inspect selected changes")
+
+    login = str(github_user.get("login") or "CodeForge User")
+    github_id = str(github_user.get("id") or "")
+    _run_git(root, "config", "user.name", login)
+    _run_git(root, "config", "user.email", f"{github_id}+{login}@users.noreply.github.com")
+    commit = _run_git(root, "commit", "-m", request.commit_message.strip(), timeout=60)
+    if commit.returncode != 0:
+        raise HTTPException(status_code=400, detail=f"Commit failed: {commit.stderr.strip()[:500]}")
+    sha_result = _run_git(root, "rev-parse", "HEAD")
+    commit_sha = sha_result.stdout.strip()[:12]
+
+    with tempfile.TemporaryDirectory(prefix="codeforge-askpass-") as temp_dir:
+        askpass, _ = _askpass_files(Path(temp_dir))
+        env = os.environ.copy()
+        env.update(
+            {
+                "CODEFORGE_GITHUB_TOKEN": token,
+                "GIT_ASKPASS": str(askpass),
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+        )
+        push = _run_git(
+            root,
+            "-c", "credential.helper=",
+            "-c", f"core.askPass={askpass}",
+            "-c", f"remote.origin.pushurl=https://github.com/{owner}/{repo}.git",
+            "push", "--set-upstream", "origin", branch,
+            timeout=90,
+            env=env,
+        )
+    if push.returncode != 0:
+        detail = (push.stderr or "GitHub rejected the push").strip()[-500:]
+        raise HTTPException(
+            status_code=502,
+            detail=f"Commit {commit_sha} is saved locally on {branch}, but push failed: {detail}",
+        )
+
+    return {
+        "branch": branch,
+        "commit": commit_sha,
+        "repository": f"{owner}/{repo}",
+        "url": f"https://github.com/{owner}/{repo}/tree/{branch}",
+        "message": "Changes committed and pushed to GitHub.",
+    }
+
+
+@app.get("/api/v1/workspaces/{workspace_id}/git/diff")
+async def workspace_git_diff(
+    workspace_id: str,
+    files: list[str] = Query(min_length=1, max_length=100),
+    user_uid: str = Depends(get_current_user),
+) -> dict:
+    """Return a bounded working-tree diff for selected workspace files."""
+    root = _resolve_workspace(workspace_id)
+    if root is None:
+        raise HTTPException(status_code=404, detail="Unknown workspace")
+    root = Path(root).resolve()
+    top = _run_git(root, "rev-parse", "--show-toplevel")
+    if top.returncode != 0 or Path(top.stdout.strip()).resolve() != root:
+        raise HTTPException(status_code=400, detail="Workspace root is not a Git repository")
+    validated = _validated_workspace_paths(root, files)
+    result = _run_git(root, "diff", "--no-ext-diff", "--unified=3", "HEAD", "--", *validated)
+    if result.returncode != 0:
+        raise HTTPException(status_code=400, detail="Could not read workspace diff")
+    return {"diff": result.stdout[:200_000], "truncated": len(result.stdout) > 200_000}
 
 
 @app.get("/api/v1/workspaces")

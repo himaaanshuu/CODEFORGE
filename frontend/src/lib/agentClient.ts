@@ -43,6 +43,7 @@ interface AnalysisObservation {
   tool_name: string
   tool_success: boolean
   observation: string
+  raw_data?: Record<string, unknown> | null
 }
 
 interface AnalysisResponse {
@@ -70,6 +71,14 @@ export interface FilePayload {
   content: string
   truncated: boolean
   bytes: number
+}
+
+export interface PublishChangesResult {
+  branch: string
+  commit: string
+  repository: string
+  url: string
+  message: string
 }
 
 /** Display label → Nebius model ID for the agent model picker. */
@@ -197,6 +206,27 @@ function mapAnalysis(data: AnalysisResponse): AgentRunView {
     ? data.files_changed
     : changes.map(c => c.path)
   const ok = data.status === 'completed' && !data.error
+  const latestTestObservation = [...(data.observations ?? [])]
+    .reverse()
+    .find(obs => obs.tool_name === 'run_tests' && obs.raw_data)
+  const testData = latestTestObservation?.raw_data
+  const testSummary = testData?.test_summary as Record<string, unknown> | undefined
+  const tests = testData && testSummary
+    ? {
+        passed: Number(testSummary.passed ?? 0),
+        failed: Number(testSummary.failed ?? 0),
+        skipped: Number(testSummary.skipped ?? 0),
+        errors: Number(testSummary.errors ?? 0),
+        durationSeconds: Number(testData.duration_ms ?? 0) / 1000,
+        success: Boolean(testData.success),
+        exitCode: typeof testData.exit_code === 'number' ? testData.exit_code : null,
+        timedOut: Boolean(testData.timed_out),
+        output: [testData.stdout, testData.stderr]
+          .filter((part): part is string => typeof part === 'string' && part.length > 0)
+          .join('\n')
+          .slice(0, 20_000),
+      }
+    : null
 
   return {
     success: ok,
@@ -207,7 +237,7 @@ function mapAnalysis(data: AnalysisResponse): AgentRunView {
     filesInspected: data.files_inspected ?? [],
     filesChanged,
     changes,
-    tests: null,
+    tests,
     metrics: {
       durationSeconds: data.duration_seconds ?? 0,
       tokensUsed: data.tokens_used ?? 0,
@@ -321,6 +351,49 @@ export async function cloneGitHubRepo(owner: string, name: string): Promise<Work
   })
   if (!res.ok) throw new Error(await readError(res, 'Repository clone failed'))
   return res.json()
+}
+
+/** Commit the latest run's selected files on a new branch and push to GitHub. */
+export async function publishWorkspaceChanges(
+  workspaceId: string,
+  files: string[],
+  branchName: string,
+  commitMessage: string,
+  githubToken: string,
+): Promise<PublishChangesResult> {
+  const response = await fetch(
+    `${API_BASE}/workspaces/${encodeURIComponent(workspaceId)}/git/publish`,
+    {
+      method: 'POST',
+      headers: await authedHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        files,
+        branch_name: branchName,
+        commit_message: commitMessage,
+        github_token: githubToken,
+      }),
+    },
+  )
+  const body = await response.json().catch(() => ({})) as Record<string, unknown>
+  if (!response.ok) {
+    throw new Error(typeof body.detail === 'string' ? body.detail : `GitHub update failed (${response.status})`)
+  }
+  return body as unknown as PublishChangesResult
+}
+
+/** Load the actual working-tree diff when the agent omitted diff output. */
+export async function fetchWorkspaceDiff(
+  workspaceId: string,
+  files: string[],
+): Promise<{ diff: string; truncated: boolean }> {
+  const params = new URLSearchParams()
+  files.forEach(path => params.append('files', path))
+  const response = await fetch(
+    `${API_BASE}/workspaces/${encodeURIComponent(workspaceId)}/git/diff?${params}`,
+    { headers: await authedHeaders() },
+  )
+  if (!response.ok) throw new Error(await readError(response, 'Could not load workspace diff'))
+  return response.json()
 }
 
 /** Fetch the file tree of a workspace. */

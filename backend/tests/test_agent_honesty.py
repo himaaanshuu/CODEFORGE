@@ -153,3 +153,41 @@ async def test_final_claiming_tests_pass_without_running_fails(
     assert result.status == "failed"
     assert result.success is False
     assert "never executed" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_repeated_test_failure_records_repair_attempt_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second failed test run should emit the required repair event field."""
+
+    async def _stub_llm(prompt: str, model: Any = None, **kwargs: Any) -> Any:
+        return _ok_llm(
+            '{"tool": "run_tests", "arguments": {"command": "pytest"}}',
+            model=str(model),
+        )
+
+    async def _stub_tool(
+        tool_name: str, arguments: dict[str, Any], registry: Any, ws: Any
+    ) -> Any:
+        return agent_mod.ToolResult(
+            tool_name="run_tests",
+            success=False,
+            error="Tests failed",
+            data={"test_summary": {"failed": 1, "errors": 0}},
+        )
+
+    monkeypatch.setattr(agent_mod, "_call_llm_with_prompt", _stub_llm)
+    monkeypatch.setattr(agent_mod, "_execute_tool", _stub_tool)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = await run_agent_task(
+            workspace_root=tmpdir,
+            task="repair failing tests",
+            max_iterations=2,
+            model="Nemotron 3 Super",
+        )
+
+    repair_events = [event for event in result.events if event["type"] == "repair_attempt"]
+    assert len(repair_events) == 1
+    assert repair_events[0]["attempt"] == 1

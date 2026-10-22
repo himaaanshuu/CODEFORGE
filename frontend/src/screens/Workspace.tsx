@@ -244,7 +244,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
         <Tabs<RunTab> label="Run" value={tab} onChange={setTab} tabs={RUN_TABS} />
         <div role="tabpanel" className="mt-5 min-h-40">
           {tab === 'activity' && activitySection}
-          {tab === 'changes' && <ChangesTab changes={agent.run?.changes ?? []} />}
+          {tab === 'changes' && <ChangesTab changes={agent.run?.changes ?? []} workspaceId={workspaceId} filesChanged={agent.run?.filesChanged ?? []} />}
           {tab === 'tests' && <TestsTab run={agent.run?.tests ?? null} />}
           {tab === 'verification' && <VerificationTab run={agent.run} />}
         </div>
@@ -361,7 +361,7 @@ export function Workspace({ view, agent, onNavigate }: Props) {
     <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
       <ViewHeader title="Changes" subtitle="Diff of the files modified by your last agent run." />
       <div className="mt-6">
-        <ChangesTab changes={agent.run?.changes ?? []} />
+        <ChangesTab changes={agent.run?.changes ?? []} workspaceId={workspaceId} filesChanged={agent.run?.filesChanged ?? []} />
       </div>
     </div>
   )

@@ -337,8 +337,7 @@ Developer Review
 | Landing pricing tiers | ✅ Available | Free $0 · Basic $12/mo · Pro $29/mo · Elite $79/mo with feature lists and CTAs |
 | In-app Docs handbook | ✅ Available | Getting started, workflow, tools, safety, prompts, panels, FAQ |
 | Clickable logo (back button) | ✅ Available | Logo navigates back from login and workspace to the landing page |
-| Git branch automation | 🔄 In Development | Automated feature branch creation |
-| Git commit automation | 🔄 In Development | Automated conventional commit creation |
+| GitHub commit and push | ✅ Available | User-reviewed latest-run files are committed on a `codex/*` branch and pushed after explicit confirmation; default branch is not pushed to |
 | Pull Request creation | 🔜 Planned | End-to-end GitHub PR creation via API |
 
 ---

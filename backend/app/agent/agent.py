@@ -210,7 +210,7 @@ async def _run_single_tool(
                 state.repair_attempts += 1
                 state.add_event(
                     RepairAttemptEvent(
-                        repair_attempt=state.repair_attempts,
+                        attempt=state.repair_attempts,
                         message=(
                             f"Tests still failing after repair attempt "
                             f"{state.repair_attempts}"

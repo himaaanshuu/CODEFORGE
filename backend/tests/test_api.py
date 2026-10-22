@@ -7,6 +7,7 @@ guards), and the analyze endpoint's workspace validation. No LLM calls.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 
 from fastapi.testclient import TestClient
@@ -198,3 +199,52 @@ def test_clone_rejects_invalid_name() -> None:
 def test_clone_rejects_empty_fields() -> None:
     resp = client.post("/api/v1/repos/clone", json={"owner": "", "name": ""})
     assert resp.status_code == 400
+
+
+def test_publish_rejects_secret_environment_file(
+    tmp_path, monkeypatch
+) -> None:
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "remote", "add", "origin", "https://github.com/octocat/hello-world.git"],
+        capture_output=True,
+        check=True,
+    )
+    monkeypatch.setitem(WORKSPACE_MAPPING, "publish-test", str(tmp_path))
+
+    resp = client.post(
+        "/api/v1/workspaces/publish-test/git/publish",
+        json={
+            "files": [".env"],
+            "branch_name": "test-update",
+            "commit_message": "test update",
+            "github_token": "never-logged-test-token",
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "Secret environment files" in resp.json()["detail"]
+
+
+def test_workspace_git_diff_returns_selected_file_diff(tmp_path, monkeypatch) -> None:
+    subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    file_path = tmp_path / "sample.py"
+    file_path.write_text("value = 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "sample.py"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "initial"], check=True)
+    file_path.write_text("value = 2\n", encoding="utf-8")
+    monkeypatch.setitem(WORKSPACE_MAPPING, "diff-test", str(tmp_path))
+
+    resp = client.get(
+        "/api/v1/workspaces/diff-test/git/diff",
+        params={"files": "sample.py"},
+    )
+
+    assert resp.status_code == 200
+    assert "-value = 1" in resp.json()["diff"]
+    assert "+value = 2" in resp.json()["diff"]

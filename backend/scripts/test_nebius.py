@@ -12,11 +12,18 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
 
 # Add the project root to the path so we can import backend package
 # Script is at backend/scripts/test_nebius.py, so go up 3 levels
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# Make the script work when run directly, without requiring the caller to
+# export backend/.env into the process environment first.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from backend.app.llm.client import get_client, shutdown, is_configured
 from backend.app.llm.models import get_model_name, HealthCheckResponse
@@ -35,7 +42,7 @@ async def run_smoke_test() -> int:
 
     # Check if API key is configured
     if not is_configured():
-        print("\n✗ NEBIUS_API_KEY not configured.")
+        print("\n[FAIL] NEBIUS_API_KEY not configured.")
         print("  Set NEBIUS_API_KEY in backend/.env to run the integration test.")
         print("  Get your free API key at: https://tokenfactory.nebius.com")
         return 1  # Configuration error, but not a crash
@@ -64,10 +71,10 @@ async def run_smoke_test() -> int:
             if len(response.response) > 500:
                 print("  ... (truncated to 500 chars)")
             print("---")
-            print("\n✓ Nebius/NVIDIA model connection successful.")
+            print("\n[PASS] Nebius/NVIDIA model connection successful.")
             return 0
         else:
-            print("\n✗ Nebius model request failed:")
+            print("\n[FAIL] Nebius model request failed:")
             print(f"  Error: {response.error}")
             # Don't expose any potential API key in the error
             await client.close()
@@ -78,7 +85,7 @@ async def run_smoke_test() -> int:
         await shutdown()
         return 1
     except Exception as e:
-        print(f"\n✗ Unexpected error during Nebius request: {str(e)[:200]}")
+        print(f"\n[FAIL] Unexpected error during Nebius request: {str(e)[:200]}")
         await shutdown()
         return 1
 

@@ -15,11 +15,15 @@ NEBIUS_NANO_MODEL: str = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
 try:
     import os
     NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY", "")
+    NEBIUS_BASE_URL = os.getenv(
+        "NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1"
+    )
     NEBIUS_MODEL = os.getenv("NEBIUS_MODEL", "nvidia/Nemotron-3-Ultra-550b-a55b")
     NEBIUS_SUPER_MODEL = os.getenv("NEBIUS_SUPER_MODEL", "nvidia/nemotron-3-super-120b-a12b")
     NEBIUS_NANO_MODEL = os.getenv("NEBIUS_NANO_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B")
 except ImportError:
     NEBIUS_API_KEY = ""
+    NEBIUS_BASE_URL = "https://api.tokenfactory.nebius.com/v1"
     NEBIUS_MODEL = "nvidia/Nemotron-3-Ultra-550b-a55b"
     NEBIUS_SUPER_MODEL = "nvidia/nemotron-3-super-120b-a12b"
     NEBIUS_NANO_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"

@@ -106,7 +106,7 @@ export function watchAuth(callback: (user: User | null) => void): () => void {
 export async function signInWithGitHub(): Promise<void> {
   const { error } = await requireClient().auth.signInWithOAuth({
     provider: 'github',
-    options: { redirectTo: window.location.origin },
+    options: { redirectTo: window.location.origin, scopes: 'repo' },
   })
   if (error) {
     throw new Error(error.message)

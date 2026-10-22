@@ -60,15 +60,16 @@ export interface FileChange {
   lines: DiffLine[]
 }
 
-export interface TestCase {
-  name: string
-  passed: boolean
-  seconds: number
-}
-
 export interface TestRun {
-  tests: TestCase[]
+  passed: number
+  failed: number
+  skipped: number
+  errors: number
   durationSeconds: number
+  success: boolean
+  exitCode: number | null
+  timedOut: boolean
+  output: string
 }
 
 /** Real per-run metrics reported by the backend. */
