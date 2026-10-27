@@ -4,13 +4,13 @@ import signal
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from pydantic import BaseModel, Field
 
 
 class ExecutionRequest(BaseModel):
-    """Structured execution request for sandboxed test execution."""
+    """Structured request for allowlisted repository test execution."""
 
     command: str = Field(
         ...,
@@ -33,7 +33,7 @@ class ExecutionRequest(BaseModel):
 
 
 class ExecutionResult(BaseModel):
-    """Structured result from sandboxed execution."""
+    """Structured result from repository test execution."""
 
     success: bool = Field(
         ...,
@@ -66,7 +66,7 @@ class ExecutionResult(BaseModel):
 
 
 class ExecutionPolicy:
-    """Policy governing what commands can be executed in the sandbox."""
+    """Policy governing which test commands can be executed."""
 
     # Allowlist of safe executables for test execution
     ALLOWED_COMMANDS = {

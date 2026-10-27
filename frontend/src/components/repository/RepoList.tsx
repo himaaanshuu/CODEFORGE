@@ -17,7 +17,7 @@ export function RepoList({ repos, onSelect }: { repos: RepoSummary[]; onSelect: 
       </div>
       <ul className="mt-5 space-y-2">
         {shown.map(r => (
-          <li key={r.name} className="panel flex items-center gap-4 p-4">
+          <li key={`${r.owner}/${r.name}`} className="panel flex items-center gap-4 p-4">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm bg-raised">
               <GithubMark size={16} />
             </span>

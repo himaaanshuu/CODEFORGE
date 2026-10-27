@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 import backend.supabase_service as store  # noqa: E402
-from backend.app.main import app  # noqa: E402
+from backend.app.main import PROJECT_ROOT, WORKSPACE_MAPPING, WORKSPACE_OWNERS, app  # noqa: E402
 from backend.auth_dep import get_current_user  # noqa: E402
 
 # --- In-memory fake PostgREST (test double for the Supabase REST API) -------
@@ -377,13 +377,15 @@ def test_failed_run_is_recorded_without_llm_call(
         raise RuntimeError("agent exploded")
 
     monkeypatch.setattr(agent_mod, "run_agent_task", _boom)
+    monkeypatch.setitem(WORKSPACE_MAPPING, "alice-workspace", str(PROJECT_ROOT))
+    monkeypatch.setitem(WORKSPACE_OWNERS, "alice-workspace", "alice")
     previous = app.dependency_overrides.get(get_current_user)
     app.dependency_overrides[get_current_user] = lambda: "alice"
     try:
         c = TestClient(app, raise_server_exceptions=False)
         resp = c.post(
             "/api/v1/runs",
-            json={"workspace_id": "local-project", "task": "x"},
+            json={"workspace_id": "alice-workspace", "task": "x"},
         )
         assert resp.status_code == 500
         runs = list(fake_rest.tables[store.RUNS].values())

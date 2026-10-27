@@ -69,8 +69,8 @@ def test_well_formed_header_passes_to_dependency(monkeypatch) -> None:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert isinstance(body, list) and body
-        assert body[0]["id"] == "local-project"
+        assert isinstance(body, list)
+        assert all(ws["id"] not in {"local-project", "demo-repo"} for ws in body)
     finally:
         if previous is None:
             app.dependency_overrides.pop(get_current_user, None)

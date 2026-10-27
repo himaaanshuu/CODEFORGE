@@ -1,0 +1,9 @@
+{
+  "name": "codeforge",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:frontend": "node scripts/dev.mjs frontend",
+    "dev:backend": "node scripts/dev.mjs backend"
+  }
+}

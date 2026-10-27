@@ -249,8 +249,8 @@ Available tools:
    - Input: {{"path": "relative/path"}}
    - Output: sorted list of entry names
 
-2. read_file: Read a file's contents with line numbers
-   - Input: {{"path": "relative/path/to/file"}}
+2. read_file: Read a file's contents with line numbers; supports an optional line offset and limit
+   - Input: {{"path": "relative/path/to/file", "offset": 0, "limit": 1000}}
    - Output: formatted string like "1 | line1\n2 | line2" or {{"raw": "raw content"}}
 
 3. search_code: Search for text in source files
@@ -279,7 +279,7 @@ Available tools:
    - Only use when apply_patch cannot achieve the desired change
    - Must be inside the repository workspace
 
-7. run_tests: Run the repository test suite
+7. run_tests: Run the repository test suite through the backend's allowlisted local test runner
    - Input: {{"test_command": "pytest"}}  (optional — defaults to pytest)
    - Output: {{"success": bool, "test_summary": {{"passed": N, "failed": N, ...}}, ...}}
 

@@ -288,7 +288,7 @@ function failureRun(task: string, message: string): AgentRunView {
  */
 export async function startAgentTask(
   task: string,
-  workspaceId: string = 'local-project',
+  workspaceId: string,
   onEvent: (event: ActivityEvent) => void,
   onComplete: (run: AgentRunView) => void,
   model?: string,

@@ -33,7 +33,11 @@ def _validate_new_path(path: str, workspace: Workspace) -> bool:
         return False
     root = Path(workspace.root).resolve()
     resolved = (root / normalized).resolve()
-    if not str(resolved).startswith(str(root) + os.sep):
+    try:
+        relative = resolved.relative_to(root)
+    except ValueError:
+        return False
+    if not relative.parts:
         return False
     if resolved.name == ".git" or ".git" in resolved.relative_to(root).parts:
         return False

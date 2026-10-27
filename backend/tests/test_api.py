@@ -14,12 +14,14 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
-from backend.app.main import PROJECT_ROOT, WORKSPACE_MAPPING, app  # noqa: E402
+from backend.app.main import PROJECT_ROOT, WORKSPACE_MAPPING, WORKSPACE_OWNERS, app  # noqa: E402
 from backend.auth_dep import get_current_user  # noqa: E402
 
 # Workspace-logic tests focus on routing/paths, not identity. Supabase is
 # mocked *in tests only* — auth behaviour itself is covered by test_auth.py.
 app.dependency_overrides[get_current_user] = lambda: "test-user-uid"
+WORKSPACE_MAPPING["test-workspace"] = str(PROJECT_ROOT)
+WORKSPACE_OWNERS["test-workspace"] = "test-user-uid"
 
 client = TestClient(app)
 
@@ -43,7 +45,7 @@ def test_list_workspaces_returns_real_configured_roots() -> None:
 
 
 def test_workspace_tree_lists_project_files() -> None:
-    resp = client.get("/api/v1/workspaces/local-project/tree")
+    resp = client.get("/api/v1/workspaces/test-workspace/tree")
     assert resp.status_code == 200
     root = resp.json()
     assert root["type"] == "dir"
@@ -60,7 +62,7 @@ def test_workspace_tree_rejects_unknown_workspace() -> None:
 
 
 def test_workspace_tree_depth_is_bounded() -> None:
-    resp = client.get("/api/v1/workspaces/local-project/tree", params={"max_depth": 1})
+    resp = client.get("/api/v1/workspaces/test-workspace/tree", params={"max_depth": 1})
     assert resp.status_code == 200
     for child in resp.json()["children"]:
         if child["type"] == "dir":
@@ -70,7 +72,7 @@ def test_workspace_tree_depth_is_bounded() -> None:
 
 def test_file_endpoint_reads_real_file() -> None:
     resp = client.get(
-        "/api/v1/workspaces/local-project/file",
+        "/api/v1/workspaces/test-workspace/file",
         params={"path": "backend/app/main.py"},
     )
     assert resp.status_code == 200
@@ -82,7 +84,7 @@ def test_file_endpoint_reads_real_file() -> None:
 
 def test_file_endpoint_rejects_traversal() -> None:
     resp = client.get(
-        "/api/v1/workspaces/local-project/file",
+        "/api/v1/workspaces/test-workspace/file",
         params={"path": "../../etc/passwd"},
     )
     assert resp.status_code == 400
@@ -90,7 +92,7 @@ def test_file_endpoint_rejects_traversal() -> None:
 
 def test_file_endpoint_rejects_absolute_path() -> None:
     resp = client.get(
-        "/api/v1/workspaces/local-project/file",
+        "/api/v1/workspaces/test-workspace/file",
         params={"path": "/etc/passwd"},
     )
     assert resp.status_code == 400
@@ -98,7 +100,7 @@ def test_file_endpoint_rejects_absolute_path() -> None:
 
 def test_file_endpoint_rejects_sensitive_files() -> None:
     resp = client.get(
-        "/api/v1/workspaces/local-project/file",
+        "/api/v1/workspaces/test-workspace/file",
         params={"path": ".env"},
     )
     assert resp.status_code == 403
@@ -106,7 +108,7 @@ def test_file_endpoint_rejects_sensitive_files() -> None:
 
 def test_file_endpoint_rejects_unknown_file() -> None:
     resp = client.get(
-        "/api/v1/workspaces/local-project/file",
+        "/api/v1/workspaces/test-workspace/file",
         params={"path": "no/such/file.py"},
     )
     assert resp.status_code == 404
@@ -161,7 +163,7 @@ def test_analyze_rejects_unknown_model_without_llm_call() -> None:
     # LLM call, so a bad value can never silently run on Ultra.
     resp = client.post(
         "/api/v1/agent/analyze",
-        json={"workspace_id": "local-project", "task": "anything", "model": "not-a-model"},
+        json={"workspace_id": "test-workspace", "task": "anything", "model": "not-a-model"},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -169,13 +171,44 @@ def test_analyze_rejects_unknown_model_without_llm_call() -> None:
     assert "Unknown model" in data["error"]
 
 
-def test_workspace_mapping_points_at_this_project() -> None:
-    # Must point at this checkout regardless of the directory name it was
-    # cloned into (e.g. "codeforge-ai", "CODEFORGE", ...).
-    assert WORKSPACE_MAPPING["local-project"] == str(PROJECT_ROOT)
-    assert os.path.isdir(WORKSPACE_MAPPING["local-project"])
-    assert os.path.isdir(os.path.join(WORKSPACE_MAPPING["local-project"], "backend"))
-    assert os.path.isdir(os.path.join(WORKSPACE_MAPPING["local-project"], "frontend"))
+def test_application_source_is_not_exposed_as_a_workspace() -> None:
+    assert "local-project" not in WORKSPACE_MAPPING
+    assert "demo-repo" not in WORKSPACE_MAPPING
+
+
+def test_workspace_is_hidden_from_another_user() -> None:
+    resp = client.get("/api/v1/workspaces/test-workspace/tree")
+    assert resp.status_code == 200
+
+    previous = app.dependency_overrides[get_current_user]
+    app.dependency_overrides[get_current_user] = lambda: "another-user-uid"
+    try:
+        assert client.get("/api/v1/workspaces").json() == []
+        assert client.get("/api/v1/workspaces/test-workspace/tree").status_code == 404
+        assert client.get(
+            "/api/v1/workspaces/test-workspace/file", params={"path": "README.md"}
+        ).status_code == 404
+        assert client.get(
+            "/api/v1/workspaces/test-workspace/git/diff",
+            params={"files": "README.md"},
+        ).status_code == 404
+        assert client.post(
+            "/api/v1/workspaces/test-workspace/git/publish",
+            json={
+                "files": ["README.md"],
+                "branch_name": "unauthorized",
+                "commit_message": "unauthorized",
+                "github_token": "test-token",
+            },
+        ).status_code == 404
+        analyze = client.post(
+            "/api/v1/agent/analyze",
+            json={"workspace_id": "test-workspace", "task": "change README"},
+        )
+        assert analyze.status_code == 200
+        assert "Unknown workspace" in analyze.json()["error"]
+    finally:
+        app.dependency_overrides[get_current_user] = previous
 
 
 def test_clone_rejects_invalid_owner() -> None:
@@ -211,6 +244,7 @@ def test_publish_rejects_secret_environment_file(
         check=True,
     )
     monkeypatch.setitem(WORKSPACE_MAPPING, "publish-test", str(tmp_path))
+    monkeypatch.setitem(WORKSPACE_OWNERS, "publish-test", "test-user-uid")
 
     resp = client.post(
         "/api/v1/workspaces/publish-test/git/publish",
@@ -239,6 +273,7 @@ def test_workspace_git_diff_returns_selected_file_diff(tmp_path, monkeypatch) ->
     subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "initial"], check=True)
     file_path.write_text("value = 2\n", encoding="utf-8")
     monkeypatch.setitem(WORKSPACE_MAPPING, "diff-test", str(tmp_path))
+    monkeypatch.setitem(WORKSPACE_OWNERS, "diff-test", "test-user-uid")
 
     resp = client.get(
         "/api/v1/workspaces/diff-test/git/diff",

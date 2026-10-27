@@ -7,7 +7,7 @@ export interface AgentController {
   events: ActivityEvent[]
   run: AgentRunView | null
   running: boolean
-  start: (task: string, workspaceId?: string, model?: string) => void
+  start: (task: string, workspaceId: string, model?: string) => void
   reset: () => void
 }
 
@@ -18,7 +18,7 @@ export function useAgentRun(): AgentController {
   // Monotonic id so a stale run's callbacks never overwrite a newer run.
   const runId = useRef(0)
 
-  const start = useCallback((task: string, workspaceId: string = 'local-project', model?: string) => {
+  const start = useCallback((task: string, workspaceId: string, model?: string) => {
     const id = ++runId.current
     setEvents([]); setRun(null); setState('ANALYZING')
     startAgentTask(

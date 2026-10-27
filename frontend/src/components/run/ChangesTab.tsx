@@ -11,14 +11,36 @@ interface Props {
   changes: FileChange[]
   workspaceId: string | null
   filesChanged: string[]
+  summary?: string
 }
 
-export function ChangesTab({ changes, workspaceId, filesChanged }: Props) {
+function makeBranchName(files: string[]): string {
+  const fileSlug = files.slice(0, 2)
+    .map(path => path.replace(/\\/g, '/').split('/').pop() ?? '')
+    .map(name => name.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+    .filter(Boolean)
+    .join('-') || 'changes'
+  const timestamp = new Date().toISOString().slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '')
+  return `update-${fileSlug.slice(0, 30)}-${timestamp}`
+}
+
+function makeCommitMessage(summary: string, files: string[]): string {
+  const conciseSummary = summary.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '')
+  if (conciseSummary && !/^(analysis completed|task completed|completed successfully)$/i.test(conciseSummary)) {
+    return `CodeForge: ${conciseSummary}`.slice(0, 120)
+  }
+  const details = files.length === 1
+    ? files[0]
+    : `${files.slice(0, 2).join(', ')}${files.length > 2 ? ` and ${files.length - 2} more` : ''}`
+  return `CodeForge: update ${details || 'project changes'}`.slice(0, 120)
+}
+
+export function ChangesTab({ changes, workspaceId, filesChanged, summary = '' }: Props) {
   const reduce = useReducedMotion()
   const [sel, setSel] = useState<string | null>(null)
   const [showPublish, setShowPublish] = useState(false)
-  const [branchName, setBranchName] = useState('update-from-codeforge')
-  const [commitMessage, setCommitMessage] = useState('Apply CodeForge agent changes')
+  const [branchName, setBranchName] = useState(() => makeBranchName(filesChanged))
+  const [commitMessage, setCommitMessage] = useState(() => makeCommitMessage(summary, filesChanged))
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
   const [published, setPublished] = useState<{ branch: string; commit: string; url: string } | null>(null)
@@ -26,6 +48,11 @@ export function ChangesTab({ changes, workspaceId, filesChanged }: Props) {
   const [diffLoading, setDiffLoading] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
   const filesKey = filesChanged.join('\n')
+
+  useEffect(() => {
+    setBranchName(makeBranchName(filesChanged))
+    setCommitMessage(makeCommitMessage(summary, filesChanged))
+  }, [filesKey, summary])
 
   useEffect(() => {
     if (changes.length > 0 || !workspaceId || filesKey.length === 0) {
@@ -135,7 +162,7 @@ export function ChangesTab({ changes, workspaceId, filesChanged }: Props) {
               <div>
                 <h3 className="font-display text-sm font-semibold">Publish reviewed changes</h3>
                 <p className="mt-1 text-xs text-subtle">
-                  CodeForge will commit the {filesChanged.length} file(s) changed in this run to a new <code>codex/</code> branch and push that branch. The default branch will not be changed.
+                  CodeForge will commit the {filesChanged.length} file(s) changed in this run to a new <code>codeforge/</code> branch and push that branch. The default branch will not be changed.
                 </p>
                 <p className="mt-1 text-xs text-subtle">
                   Review each diff first. The commit includes all current unstaged edits in the listed files.
@@ -149,12 +176,13 @@ export function ChangesTab({ changes, workspaceId, filesChanged }: Props) {
                   Branch name
                   <span className="mt-1 flex items-center gap-2 rounded-sm border border-strong px-3 py-2 text-fg">
                     <GitBranch size={14} aria-hidden className="shrink-0" />
-                    <span className="font-mono text-subtle">codex/</span>
+                    <span className="font-mono text-subtle">codeforge/</span>
                     <input required maxLength={55} pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value={branchName} onChange={event => setBranchName(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono outline-none" />
                   </span>
                 </label>
                 <label className="text-xs text-subtle">
                   Commit message
+                  <span className="sr-only">Suggested from the agent summary and changed files; editable.</span>
                   <input required maxLength={120} value={commitMessage} onChange={event => setCommitMessage(event.target.value)} className="mt-1 w-full rounded-sm border border-strong bg-transparent px-3 py-2 text-fg outline-none focus:border-burgundy" />
                 </label>
               </div>

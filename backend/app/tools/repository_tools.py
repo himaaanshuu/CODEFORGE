@@ -9,6 +9,16 @@ from ..repository.workspace import Workspace
 from .base import ToolResult
 
 
+def _format_file_lines(raw: str, offset: int = 0, limit: int = 1000) -> str:
+    """Format a bounded, zero-based line range with original line numbers."""
+    lines = raw.splitlines()
+    selected = lines[offset : offset + min(limit, 1000)]
+    return "\n".join(
+        f"{line_number} | {line}"
+        for line_number, line in enumerate(selected, start=offset + 1)
+    )
+
+
 class ListFilesTool:
     """Tool for listing files inside the repository workspace.
 
@@ -98,11 +108,22 @@ class ReadFileTool:
                     "type": "string",
                     "description": "Relative path inside the workspace to read (required).",
                 },
+                "offset": {
+                    "type": "integer",
+                    "description": "Zero-based line offset for reading a section (default: 0).",
+                    "minimum": 0,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of lines to return (default: 1000, maximum: 1000).",
+                    "minimum": 1,
+                    "maximum": 1000,
+                },
             },
             "required": ["path"],
         }
 
-    async def execute(self, path: str) -> ToolResult:
+    async def execute(self, path: str, offset: int = 0, limit: int = 1000) -> ToolResult:
         """Read a file's contents from inside the workspace.
 
         Returns a ToolResult with the file contents.
@@ -148,13 +169,10 @@ class ReadFileTool:
                 error=f"Path is a directory, not a file: {path}",
             )
 
-        # Read the file contents (with line numbers)
-        contents = self.workspace.read_file_with_line_numbers(path)
+        if offset < 0 or limit < 1:
+            return ToolResult(name=self.name, success=False, error="offset must be non-negative and limit must be positive.")
+        limit = min(limit, 1000)
 
-        if contents is not None:
-            return ToolResult(name=self.name, success=True, data={"with_line_numbers": contents})
-
-        # Fall back to plain read
         raw = self.workspace.read_file(path)
         if raw is None:
             return ToolResult(
@@ -162,7 +180,8 @@ class ReadFileTool:
                 success=False,
                 error=f"Failed to read file: {path}",
             )
-        return ToolResult(name=self.name, success=True, data={"raw": raw})
+        contents = _format_file_lines(raw, offset, limit)
+        return ToolResult(name=self.name, success=True, data={"with_line_numbers": contents})
 
 
 class SearchCodeTool:

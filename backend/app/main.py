@@ -62,13 +62,12 @@ app.add_middleware(
 )
 
 # --- Workspace configuration ---------------------------------------------
-# The single local workspace root the agent is allowed to read/modify.
+# The application source is never exposed as a user workspace. Clones are
+# stored and registered per authenticated user.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-WORKSPACE_MAPPING: dict[str, str] = {
-    "local-project": str(PROJECT_ROOT),
-    "demo-repo": str(PROJECT_ROOT),
-}
+WORKSPACE_MAPPING: dict[str, str] = {}
+WORKSPACE_OWNERS: dict[str, str] = {}
 
 # Directories never listed in the file tree.
 _SKIP_DIRS = {
@@ -139,17 +138,18 @@ def _git_branch(root: Path) -> str:
     return ""
 
 
-def _adopt_existing_clones() -> None:
-    """Re-register on-disk clones that the in-memory mapping lost.
+def _user_workspace_key(user_uid: str) -> str:
+    """Return a stable, non-reversible filesystem namespace for one user."""
+    import hashlib
 
-    WORKSPACE_MAPPING resets on every backend restart while cloned_repos/
-    persists, which used to strand clones as "Unknown workspace". Scanning
-    the clone root for {owner}__{name} git checkouts and re-registering
-    their gh-{owner}-{name} ids makes resolution self-healing. Only real
-    git checkouts whose parts pass the GitHub name rules are adopted.
-    """
+    return hashlib.sha256(user_uid.encode("utf-8")).hexdigest()[:24]
+
+
+def _adopt_existing_clones(user_uid: str) -> None:
+    """Re-register only the authenticated user's clones after a restart."""
+    user_root = _CLONE_ROOT / _user_workspace_key(user_uid)
     try:
-        entries = list(_CLONE_ROOT.iterdir())
+        entries = list(user_root.iterdir())
     except OSError:
         return
     for entry in entries:
@@ -162,29 +162,24 @@ def _adopt_existing_clones() -> None:
             continue
         if not (entry / ".git").is_dir():
             continue
-        ws_id = f"gh-{owner}-{name}"
-        if WORKSPACE_MAPPING.get(ws_id) != str(entry):
-            WORKSPACE_MAPPING[ws_id] = str(entry)
+        ws_id = f"gh-{_user_workspace_key(user_uid)}-{owner}-{name}"
+        WORKSPACE_MAPPING[ws_id] = str(entry)
+        WORKSPACE_OWNERS[ws_id] = user_uid
 
 
-def _resolve_workspace(workspace_id: str) -> Path | None:
+def _resolve_workspace(workspace_id: str, user_uid: str) -> Path | None:
+    if WORKSPACE_OWNERS.get(workspace_id) != user_uid:
+        _adopt_existing_clones(user_uid)
+    if WORKSPACE_OWNERS.get(workspace_id) != user_uid:
+        return None
     root = WORKSPACE_MAPPING.get(workspace_id)
     if root is not None:
         path = Path(root)
         if path.is_dir():
             return path
-        # Stale entry (directory deleted) — drop it unless it's built-in,
-        # then fall through to the on-disk adoption scan below.
-        if workspace_id != "local-project":
-            WORKSPACE_MAPPING.pop(workspace_id, None)
-    # Mapping miss (e.g. after a backend restart): re-adopt clones that
-    # still exist on disk before giving up.
-    _adopt_existing_clones()
-    root = WORKSPACE_MAPPING.get(workspace_id)
-    if root is None:
-        return None
-    path = Path(root)
-    return path if path.is_dir() else None
+        WORKSPACE_MAPPING.pop(workspace_id, None)
+        WORKSPACE_OWNERS.pop(workspace_id, None)
+    return None
 
 
 def _build_tree(root: Path, rel: str, depth: int, max_depth: int, budget: list[int]) -> dict:
@@ -370,8 +365,9 @@ def _askpass_files(directory: Path) -> tuple[Path, Path]:
     return command_script, python_script
 
 
-def _register_workspace(ws_id: str, root: Path) -> dict:
+def _register_workspace(ws_id: str, root: Path, user_uid: str) -> dict:
     WORKSPACE_MAPPING[ws_id] = str(root)
+    WORKSPACE_OWNERS[ws_id] = user_uid
     return {
         "id": ws_id,
         "name": root.name or ws_id,
@@ -397,22 +393,23 @@ async def clone_repo(
     if not _GITHUB_OWNER_RE.fullmatch(owner) or not _GITHUB_NAME_RE.fullmatch(name):
         raise HTTPException(status_code=400, detail="Invalid repository owner or name")
 
-    ws_id = f"gh-{owner}-{name}"
-    dest = _CLONE_ROOT / f"{owner}__{name}"
+    user_key = _user_workspace_key(user_uid)
+    ws_id = f"gh-{user_key}-{owner}-{name}"
+    user_root = _CLONE_ROOT / user_key
+    dest = user_root / f"{owner}__{name}"
     if ws_id in WORKSPACE_MAPPING and dest.is_dir():
-        return _register_workspace(ws_id, dest)
+        return _register_workspace(ws_id, dest, user_uid)
 
     import shutil
 
     if dest.is_dir():
         if (dest / ".git").is_dir():
-            # A clone from a previous process still exists on disk. Workspace
-            # registration is in-memory and resets on restart — adopt it
-            # instead of failing on a non-empty destination.
-            return _register_workspace(ws_id, dest)
+            # A clone from a previous process still exists in this user's
+            # directory. Adopt it instead of failing on a non-empty destination.
+            return _register_workspace(ws_id, dest, user_uid)
         shutil.rmtree(dest, ignore_errors=True)
 
-    _CLONE_ROOT.mkdir(parents=True, exist_ok=True)
+    user_root.mkdir(parents=True, exist_ok=True)
     url = f"https://github.com/{owner}/{name}.git"
     try:
         result = subprocess.run(
@@ -430,7 +427,7 @@ async def clone_repo(
         reason = stderr[-1] if stderr else f"git exited {result.returncode}"
         raise HTTPException(status_code=502, detail=f"Clone failed: {reason}")
 
-    return _register_workspace(ws_id, dest)
+    return _register_workspace(ws_id, dest, user_uid)
 
 
 @app.post("/api/v1/workspaces/{workspace_id}/git/publish")
@@ -440,7 +437,7 @@ async def publish_workspace_changes(
     user_uid: str = Depends(get_current_user),
 ) -> dict:
     """Commit selected agent changes on a new branch and push it to GitHub."""
-    root = _resolve_workspace(workspace_id)
+    root = _resolve_workspace(workspace_id, user_uid)
     if root is None:
         raise HTTPException(status_code=404, detail="Unknown workspace")
     root = Path(root).resolve()
@@ -462,7 +459,7 @@ async def publish_workspace_changes(
     owner, repo = match.groups()
     repo = re.sub(r"\.git$", "", repo, flags=re.IGNORECASE)
 
-    branch = f"codex/{request.branch_name}"
+    branch = f"codeforge/{request.branch_name}"
     if ".." in branch or branch.endswith((".", ".lock", "/")):
         raise HTTPException(status_code=400, detail="Invalid branch name")
 
@@ -583,7 +580,7 @@ async def workspace_git_diff(
     user_uid: str = Depends(get_current_user),
 ) -> dict:
     """Return a bounded working-tree diff for selected workspace files."""
-    root = _resolve_workspace(workspace_id)
+    root = _resolve_workspace(workspace_id, user_uid)
     if root is None:
         raise HTTPException(status_code=404, detail="Unknown workspace")
     root = Path(root).resolve()
@@ -603,9 +600,11 @@ async def list_workspaces(
 ) -> list[dict]:
     """List configured workspace roots with real git metadata."""
     # Re-adopt on-disk clones so the picker repopulates after a restart.
-    _adopt_existing_clones()
+    _adopt_existing_clones(user_uid)
     out: list[dict] = []
     for ws_id, root in WORKSPACE_MAPPING.items():
+        if WORKSPACE_OWNERS.get(ws_id) != user_uid:
+            continue
         path = Path(root)
         out.append(
             {
@@ -625,7 +624,7 @@ async def workspace_tree(
     user_uid: str = Depends(get_current_user),
 ) -> dict:
     """Return the file tree of a workspace (skip dirs, bounded size)."""
-    root = _resolve_workspace(workspace_id)
+    root = _resolve_workspace(workspace_id, user_uid)
     if root is None:
         return _error_response(404, f"Unknown workspace: {workspace_id}")
     budget = [_TREE_NODE_BUDGET]
@@ -639,7 +638,7 @@ async def workspace_file(
     user_uid: str = Depends(get_current_user),
 ) -> dict:
     """Read a single file from a workspace with path and sensitivity guards."""
-    root = _resolve_workspace(workspace_id)
+    root = _resolve_workspace(workspace_id, user_uid)
     if root is None:
         return _error_response(404, f"Unknown workspace: {workspace_id}")
 
@@ -682,7 +681,7 @@ async def workspace_file(
 
 
 class AgentRequest(BaseModel):
-    workspace_id: str = "local-project"
+    workspace_id: str
     task: str
     max_iterations: int | None = None
     model: str | None = None
@@ -739,7 +738,7 @@ async def agent_analyze(
     # Strict allow-list: the agent may only operate on configured workspaces —
     # never on an arbitrary path supplied by the client. _resolve_workspace
     # also re-adopts on-disk clones lost by a backend restart.
-    resolved = _resolve_workspace(request.workspace_id)
+    resolved = _resolve_workspace(request.workspace_id, user_uid)
 
     if resolved is None:
         detail = f"Unknown workspace: {request.workspace_id}"
@@ -761,7 +760,7 @@ async def agent_analyze(
 
 
 class RunRequest(BaseModel):
-    workspace_id: str = "local-project"
+    workspace_id: str
     task: str
     max_iterations: int | None = None
     model: str | None = None
@@ -800,7 +799,7 @@ async def create_run(
         raise HTTPException(status_code=400, detail=str(exc))
     # Strict allow-list — same rule as /agent/analyze: no arbitrary paths.
     # _resolve_workspace also re-adopts on-disk clones lost by a restart.
-    resolved = _resolve_workspace(request.workspace_id)
+    resolved = _resolve_workspace(request.workspace_id, user_uid)
     if resolved is None:
         raise HTTPException(
             status_code=400,

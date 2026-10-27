@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Sandboxed test execution tool
-# Runs repository tests in a controlled, workspace-scoped environment
+# Repository test execution tool. This is a host process, not a security sandbox.
 
 
 def _get_python_path() -> str:
@@ -36,8 +36,36 @@ FORBIDDEN_COMMANDS = {"rm", "sudo", "curl", "wget", "ssh", "scp", "kill", "killa
 ALLOWED_TEST_COMMANDS = {"pytest", "python", "python3"}
 
 
-def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
-    """Run tests in a sandboxed environment.
+def _build_test_environment(workspace_root: str) -> Dict[str, str]:
+    """Pass only runtime essentials to pytest; never inherit backend secrets."""
+    safe_keys = {
+        "PATH", "SYSTEMROOT", "WINDIR", "PATHEXT", "COMSPEC", "TEMP", "TMP",
+        "TMPDIR", "LANG", "LC_ALL",
+    }
+    env = {key: value for key, value in os.environ.items() if key in safe_keys}
+    env["HOME"] = workspace_root
+    env["USERPROFILE"] = workspace_root
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return env
+
+
+def _empty_test_result(error: str) -> Dict[str, Any]:
+    return {
+        "success": False,
+        "error": error,
+        "exit_code": None,
+        "duration_ms": 0,
+        "timed_out": False,
+        "test_summary": {"passed": 0, "failed": 0, "skipped": 0, "errors": 0},
+    }
+
+
+def run_tests(
+    test_command: str,
+    workspace_root: str,
+    timeout_seconds: int = 60,
+) -> Dict[str, Any]:
+    """Run tests with an allowlisted command and clean environment.
 
     Validates the command against the execution policy,
     runs the tests inside the workspace, and returns structured results.
@@ -50,7 +78,10 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
         Dictionary with test execution results.
     """
     # Parse the command
-    cmd_parts = test_command.split()
+    try:
+        cmd_parts = shlex.split(test_command, posix=os.name != "nt")
+    except ValueError as exc:
+        return _empty_test_result(f"Invalid test command: {exc}")
     cmd_name = cmd_parts[0] if cmd_parts else ""
 
     # Validate the command against policy
@@ -75,23 +106,27 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
             "test_summary": {"passed": 0, "failed": 0, "skipped": 0, "errors": 0},
         }
 
+    extra_args = cmd_parts[1:] if len(cmd_parts) > 1 else []
+    if cmd_name in {"python", "python3"}:
+        if extra_args[:2] == ["-m", "pytest"]:
+            extra_args = extra_args[2:]
+        elif extra_args:
+            return _empty_test_result("Only Python's pytest module is allowed by the execution policy.")
+    elif any(arg in {"-c", "--command"} for arg in extra_args):
+        return _empty_test_result("Inline Python execution is not allowed by the test execution policy.")
+
     # Determine the Python executable and test command. Extra arguments after
     # the allow-listed command name (e.g. a specific test path) are passed
     # through so the model can target a single test file.
     python_path = _get_python_path()
-    extra_args = cmd_parts[1:] if len(cmd_parts) > 1 else []
-
     actual_cmd = [python_path, "-m", "pytest", "-v", "--tb=short", *extra_args]
 
     # Set timeout (subprocess timeout — portable, no signal.alarm)
-    timeout = 60  # seconds
+    timeout = min(max(int(timeout_seconds), 1), 300)
 
-    # Sanitize environment - only pass through safe variables
-    env = os.environ.copy()
-    # Remove potentially sensitive variables
-    for key in list(env.keys()):
-        if any(key.startswith(prefix) for prefix in ("SECRET", "KEY", "TOKEN", "PASSWORD", "API")):
-            del env[key]
+    # Allowlist environment variables. Prefix filtering missed secrets whose
+    # names include, rather than start with, API_KEY, TOKEN, or SECRET.
+    env = _build_test_environment(workspace_root)
 
     # Execute the command
     start_time = time.time()
@@ -188,7 +223,7 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
             f"{failed} failed, {errors} error(s)."
         )
     if timed_out:
-        message_parts.append("Execution timed out after 60 seconds.")
+        message_parts.append(f"Execution timed out after {timeout} seconds.")
     if stdout_size > max_output or stderr_size > max_error:
         message_parts.append("Output was truncated due to size limits.")
 
@@ -210,10 +245,10 @@ def run_tests(test_command: str, workspace_root: str) -> Dict[str, Any]:
 
 
 class RunTestsTool:
-    """Tool for running repository tests in a sandboxed environment."""
+    """Tool for running repository tests with a clean environment."""
 
     name = "run_tests"
-    description = "Run repository tests in a sandboxed environment with policy validation."
+    description = "Run repository tests with command policy validation and a clean environment."
 
     def __init__(self, workspace_root: str) -> None:
         self.workspace_root = workspace_root
@@ -233,7 +268,7 @@ class RunTestsTool:
         }
 
     async def execute(self, test_command: Optional[str] = None) -> Dict[str, Any]:
-        """Execute the test command in a sandboxed environment.
+        """Execute the test command using the local backend host.
 
         Args:
             test_command: The test command to run. Defaults to "pytest".

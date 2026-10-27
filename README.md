@@ -319,8 +319,7 @@ Developer Review
 | `apply_patch` | ✅ Available | Unified diff patcher with atomic application |
 | `inspect_diff` | ✅ Available | Workspace diff inspection & hunk parsing |
 | `write_file` | ✅ Available | Safe workspace-only file creation & editing |
-| Test execution (`run_tests`) | ✅ Available | Sandboxed execution policy with strict command filtering |
-| Sandboxed test runner | ✅ Available | 60s timeout, SIGALRM, 100KB limits, env sanitization |
+| Test execution (`run_tests`) | ✅ Available | Allowlisted pytest runs on the backend host with a clean environment, timeout, and bounded logs |
 | Autonomous repair loop | ✅ Available | Max 5 repair attempts, failure history tracking |
 | Failure diagnosis | ✅ Available | LLM root-cause analysis & regression prevention |
 | Final verification | ✅ Available | Full test suite re-verification gate before success |
@@ -337,7 +336,7 @@ Developer Review
 | Landing pricing tiers | ✅ Available | Free $0 · Basic $12/mo · Pro $29/mo · Elite $79/mo with feature lists and CTAs |
 | In-app Docs handbook | ✅ Available | Getting started, workflow, tools, safety, prompts, panels, FAQ |
 | Clickable logo (back button) | ✅ Available | Logo navigates back from login and workspace to the landing page |
-| GitHub commit and push | ✅ Available | User-reviewed latest-run files are committed on a `codex/*` branch and pushed after explicit confirmation; default branch is not pushed to |
+| GitHub commit and push | ✅ Available | User-reviewed latest-run files are committed on a `codeforge/*` branch with a suggested change summary, then pushed after confirmation; default branch is not pushed to |
 | Pull Request creation | 🔜 Planned | End-to-end GitHub PR creation via API |
 
 ---
@@ -1012,6 +1011,12 @@ VITE_SUPABASE_ANON_KEY=your_anon_public_key
 > Never commit them. `NEBIUS_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY`
 > are server-only — never put them in `VITE_*` variables.
 
+### Test execution
+
+The backend runs allowlisted pytest commands locally with a reduced environment,
+a timeout, and bounded output. This does not isolate test code from the backend
+host; run tests only for trusted workspaces.
+
 ### Supabase database
 
 Apply the schema once per project (Supabase Dashboard → SQL Editor → paste & run):
@@ -1023,6 +1028,21 @@ supabase/migrations/0001_init.sql   # runs, events, usage tables + RLS
 ---
 
 # ▶️ Running CodeForge
+
+From the repository root, install frontend dependencies once with
+`npm --prefix frontend install`, then start both services together:
+
+```bash
+npm run dev
+```
+
+This starts the Vite frontend at `http://localhost:5173` and the FastAPI
+backend at `http://localhost:8000`. It uses `backend/venv` when available;
+otherwise, it uses the Python executable on your PATH. Press Ctrl+C to stop
+both services.
+
+You can also start only one service with `npm run dev:frontend` or
+`npm run dev:backend`.
 
 ## Start Backend
 
