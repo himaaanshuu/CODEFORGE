@@ -1062,6 +1062,19 @@ npm run dev
 
 ---
 
+## Start Frontend & Backend Together
+
+From the **repository root** (requires backend venv active):
+
+```bash
+npm run dev
+```
+
+This runs the frontend (Vite on port 5173) and backend (Uvicorn on port 8000)
+concurrently. The root `package.json` orchestrates both processes.
+
+---
+
 # 🧪 Testing & Validation
 
 ### Backend Test Suite

@@ -1,0 +1,8 @@
+{
+  "name": "codeforge-root",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "npm run dev --prefix frontend & python -m uvicorn backend.app.main:app --reload --port 8000"
+  }
+}
