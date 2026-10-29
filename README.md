@@ -5,6 +5,7 @@
 > **CodeForge doesn't just write code. It proves its work.**
 
 CodeForge AI is an autonomous software-engineering agent designed to understand real codebases, reason about developer requirements, modify code, run tests, diagnose failures, repair them iteratively, and verify the final result before delivering changes through GitHub.
+CodeForge lets you review the agent's code changes before publishing them to GitHub.
 
 ---
 
